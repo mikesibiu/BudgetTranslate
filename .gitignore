@@ -1,0 +1,9 @@
+node_modules/
+google-credentials.json
+*.log
+.DS_Store
+.env
+credentials.json
+*.jwpub
+glossary-temp/node_modules/
+glossary-temp/translate-cache.json

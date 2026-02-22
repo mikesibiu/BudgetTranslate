@@ -1,0 +1,54 @@
+{
+  "name": "GTranslate V4",
+  "description": "Real-time speech translation using Google Cloud Speech-to-Text and Translation APIs",
+  "repository": "https://github.com/yourusername/gtranslate-v4",
+  "keywords": [
+    "translation",
+    "speech-to-text",
+    "google-cloud",
+    "real-time",
+    "websocket"
+  ],
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "description": "Node environment",
+      "value": "production",
+      "required": true
+    },
+    "GOOGLE_CREDENTIALS_JSON": {
+      "description": "Google Cloud service account credentials as JSON string (paste entire contents of google-credentials.json)",
+      "required": true
+    },
+    "MAX_CONNECTIONS": {
+      "description": "Maximum concurrent connections",
+      "value": "50",
+      "required": false
+    },
+    "MAX_CONNECTIONS_PER_IP": {
+      "description": "Maximum connections per IP address",
+      "value": "5",
+      "required": false
+    },
+    "INACTIVITY_TIMEOUT": {
+      "description": "Session inactivity timeout in milliseconds",
+      "value": "1800000",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": [],
+  "scripts": {
+    "postdeploy": "echo 'GTranslate V4 deployed successfully!'"
+  }
+}

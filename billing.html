@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTranslate V4 - Billing Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .nav {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .nav a {
+            color: white;
+            text-decoration: none;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: inline-block;
+            transition: background 0.3s;
+        }
+
+        .nav a:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .dashboard {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h3 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card .amount {
+            font-size: 2.2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .card .detail {
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .usage-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .usage-table th,
+        .usage-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .usage-table th {
+            background: #f8f9fa;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .usage-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .language-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: box-shadow 0.3s;
+        }
+
+        .language-card:hover {
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .language-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .language-name {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .language-cost {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .language-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stat-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .cost-breakdown {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .cost-item:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-top: 10px;
+            padding-top: 15px;
+            border-top: 2px solid #667eea;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        .info-box h4 {
+            color: #1976D2;
+            margin-bottom: 10px;
+        }
+
+        .info-box ul {
+            margin-left: 20px;
+            color: #555;
+        }
+
+        .info-box ul li {
+            margin: 5px 0;
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-bottom: 20px;
+        }
+
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .refresh-btn:active {
+            transform: translateY(0);
+        }
+
+        .last-updated {
+            color: #666;
+            font-size: 0.9em;
+            margin-left: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .usage-table {
+                font-size: 0.9em;
+            }
+
+            .usage-table th,
+            .usage-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💰 Billing Dashboard</h1>
+            <p>Track your Google Cloud API usage and costs</p>
+        </div>
+
+        <div class="nav">
+            <a href="/">← Back to App</a>
+        </div>
+
+        <div class="dashboard">
+            <button class="refresh-btn" onclick="refreshUsage()">🔄 Refresh Usage</button>
+            <span class="last-updated" id="lastUpdated">Last updated: Never</span>
+
+            <div class="summary-cards">
+                <div class="card">
+                    <h3>Current Month Total</h3>
+                    <div class="amount" id="monthTotal">$0.00</div>
+                    <div class="detail">Estimated cost</div>
+                </div>
+                <div class="card">
+                    <h3>Today's Usage</h3>
+                    <div class="amount" id="todayTotal">$0.00</div>
+                    <div class="detail">Since midnight UTC</div>
+                </div>
+                <div class="card">
+                    <h3>Session Total</h3>
+                    <div class="amount" id="sessionTotal">$0.00</div>
+                    <div class="detail">Since page load</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>📊 API Usage Breakdown</h2>
+                <table class="usage-table">
+                    <thead>
+                        <tr>
+                            <th>Service</th>
+                            <th>Units Used</th>
+                            <th>Rate</th>
+                            <th>Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usageTableBody">
+                        <tr>
+                            <td>Speech-to-Text (Streaming)</td>
+                            <td id="sttMinutes">0 minutes</td>
+                            <td>$0.024 / minute</td>
+                            <td id="sttCost">$0.00</td>
+                        </tr>
+                        <tr>
+                            <td>Translation API v3 (NMT)</td>
+                            <td id="translationChars">0 chars</td>
+                            <td>$20 / 1M chars</td>
+                            <td id="translationCost">$0.00</td>
+                        </tr>
+                        <tr>
+                            <td>Translation API v3 (with Glossary)</td>
+                            <td id="glossaryChars">0 chars</td>
+                            <td>$25 / 1M chars</td>
+                            <td id="glossaryCost">$0.00</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="cost-breakdown">
+                    <div class="cost-item">
+                        <span>Speech-to-Text Streaming:</span>
+                        <span id="sttBreakdown">$0.00</span>
+                    </div>
+                    <div class="cost-item">
+                        <span>Translation (Standard):</span>
+                        <span id="translationBreakdown">$0.00</span>
+                    </div>
+                    <div class="cost-item">
+                        <span>Translation (Glossary):</span>
+                        <span id="glossaryBreakdown">$0.00</span>
+                    </div>
+                    <div class="cost-item">
+                        <span>Total Estimated Cost:</span>
+                        <span id="totalBreakdown">$0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🌍 Cost by Source Language</h2>
+                <div id="languageBreakdown">
+                    <p style="color: #666; font-style: italic;">No language data yet. Start using the app to see language-specific costs.</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>ℹ️ Pricing Information</h2>
+                <div class="info-box">
+                    <h4>Google Cloud Speech-to-Text API</h4>
+                    <ul>
+                        <li><strong>Streaming Recognition:</strong> $0.024 per minute (Enhanced model)</li>
+                        <li><strong>First 60 minutes/month:</strong> Free tier</li>
+                        <li>Audio is processed in real-time as you speak</li>
+                    </ul>
+                </div>
+
+                <div class="info-box">
+                    <h4>Google Cloud Translation API v3</h4>
+                    <ul>
+                        <li><strong>Neural Machine Translation (NMT):</strong> $20 per 1 million characters</li>
+                        <li><strong>With Custom Glossary:</strong> $25 per 1 million characters (+25%)</li>
+                        <li><strong>First 500,000 characters/month:</strong> Free tier</li>
+                        <li>Character count includes spaces and punctuation</li>
+                    </ul>
+                </div>
+
+                <div class="info-box">
+                    <h4>How to View Actual Billing</h4>
+                    <ul>
+                        <li>Visit <a href="https://console.cloud.google.com/billing" target="_blank">Google Cloud Console - Billing</a></li>
+                        <li>Select your project: <strong id="projectId">Loading...</strong></li>
+                        <li>View detailed usage reports and actual charges</li>
+                        <li>Set up billing alerts to avoid surprises</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Session tracking
+        let sessionData = {
+            sttMinutes: 0,
+            translationChars: 0,
+            glossaryChars: 0,
+            startTime: Date.now(),
+            languages: {} // Track per-language usage: { 'ro-RO': { sttMinutes, translationChars, glossaryChars }, ... }
+        };
+
+        // Load session data from localStorage
+        function loadSessionData() {
+            const saved = localStorage.getItem('gtranslate_billing_session');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // Only use if from today
+                    const savedDate = new Date(parsed.startTime).toDateString();
+                    const today = new Date().toDateString();
+                    if (savedDate === today) {
+                        sessionData = parsed;
+                    }
+                } catch (e) {
+                    console.error('Failed to load session data:', e);
+                }
+            }
+            updateDisplay();
+        }
+
+        // Save session data to localStorage
+        function saveSessionData() {
+            localStorage.setItem('gtranslate_billing_session', JSON.stringify(sessionData));
+        }
+
+        // Calculate costs
+        function calculateCosts() {
+            // Speech-to-Text: $0.024 per minute (after free tier)
+            const sttFreeTier = 60; // minutes per month
+            const sttRate = 0.024;
+            const billableSttMinutes = Math.max(0, sessionData.sttMinutes - sttFreeTier);
+            const sttCost = billableSttMinutes * sttRate;
+
+            // Translation: $20 per 1M chars (after free tier)
+            const translationFreeTier = 500000; // chars per month
+            const translationRate = 20 / 1000000;
+            const billableTranslationChars = Math.max(0, sessionData.translationChars - translationFreeTier);
+            const translationCost = billableTranslationChars * translationRate;
+
+            // Glossary Translation: $25 per 1M chars (no free tier for glossary premium)
+            const glossaryRate = 25 / 1000000;
+            const glossaryCost = sessionData.glossaryChars * glossaryRate;
+
+            const totalCost = sttCost + translationCost + glossaryCost;
+
+            return {
+                sttCost,
+                translationCost,
+                glossaryCost,
+                totalCost
+            };
+        }
+
+        // Update display
+        function updateDisplay() {
+            const costs = calculateCosts();
+
+            // Update usage numbers
+            document.getElementById('sttMinutes').textContent = `${sessionData.sttMinutes.toFixed(2)} minutes`;
+            document.getElementById('translationChars').textContent = `${sessionData.translationChars.toLocaleString()} chars`;
+            document.getElementById('glossaryChars').textContent = `${sessionData.glossaryChars.toLocaleString()} chars`;
+
+            // Update costs
+            document.getElementById('sttCost').textContent = `$${costs.sttCost.toFixed(4)}`;
+            document.getElementById('translationCost').textContent = `$${costs.translationCost.toFixed(4)}`;
+            document.getElementById('glossaryCost').textContent = `$${costs.glossaryCost.toFixed(4)}`;
+
+            // Update summary cards
+            document.getElementById('sessionTotal').textContent = `$${costs.totalCost.toFixed(4)}`;
+            document.getElementById('todayTotal').textContent = `$${costs.totalCost.toFixed(4)}`;
+            document.getElementById('monthTotal').textContent = `$${costs.totalCost.toFixed(4)}`;
+
+            // Update breakdown
+            document.getElementById('sttBreakdown').textContent = `$${costs.sttCost.toFixed(4)}`;
+            document.getElementById('translationBreakdown').textContent = `$${costs.translationCost.toFixed(4)}`;
+            document.getElementById('glossaryBreakdown').textContent = `$${costs.glossaryCost.toFixed(4)}`;
+            document.getElementById('totalBreakdown').textContent = `$${costs.totalCost.toFixed(4)}`;
+
+            // Update timestamp
+            document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+
+            // Update language breakdown
+            updateLanguageBreakdown();
+
+            saveSessionData();
+        }
+
+        // Language name mapping
+        const languageNames = {
+            'ro-RO': '🇷🇴 Romanian',
+            'ru-RU': '🇷🇺 Russian',
+            'en-US': '🇺🇸 English (US)',
+            'en-GB': '🇬🇧 English (UK)',
+            'es-ES': '🇪🇸 Spanish',
+            'fr-FR': '🇫🇷 French',
+            'de-DE': '🇩🇪 German',
+            'it-IT': '🇮🇹 Italian',
+            'pt-PT': '🇵🇹 Portuguese',
+            'pl-PL': '🇵🇱 Polish',
+            'uk-UA': '🇺🇦 Ukrainian',
+            'ja-JP': '🇯🇵 Japanese',
+            'zh-CN': '🇨🇳 Chinese (Simplified)',
+            'ko-KR': '🇰🇷 Korean',
+            'ar-SA': '🇸🇦 Arabic'
+        };
+
+        function updateLanguageBreakdown() {
+            const container = document.getElementById('languageBreakdown');
+
+            const languages = sessionData.languages || {};
+            const languageCodes = Object.keys(languages);
+
+            if (languageCodes.length === 0) {
+                container.innerHTML = '<p style="color: #666; font-style: italic;">No language data yet. Start using the app to see language-specific costs.</p>';
+                return;
+            }
+
+            // Calculate costs for each language
+            const languageData = languageCodes.map(code => {
+                const data = languages[code];
+                const sttCost = Math.max(0, data.sttMinutes - 60) * 0.024;
+                const translationCost = Math.max(0, data.translationChars - 500000) * (20 / 1000000);
+                const glossaryCost = data.glossaryChars * (25 / 1000000);
+                const totalCost = sttCost + translationCost + glossaryCost;
+
+                return {
+                    code,
+                    name: languageNames[code] || code,
+                    sttMinutes: data.sttMinutes,
+                    translationChars: data.translationChars,
+                    glossaryChars: data.glossaryChars,
+                    sttCost,
+                    translationCost,
+                    glossaryCost,
+                    totalCost
+                };
+            });
+
+            // Sort by total cost (highest first)
+            languageData.sort((a, b) => b.totalCost - a.totalCost);
+
+            // Build HTML
+            let html = '';
+            languageData.forEach(lang => {
+                html += `
+                    <div class="language-card">
+                        <div class="language-header">
+                            <div class="language-name">${lang.name}</div>
+                            <div class="language-cost">$${lang.totalCost.toFixed(4)}</div>
+                        </div>
+                        <div class="language-stats">
+                            <div class="stat-item">
+                                <div class="stat-label">Speech-to-Text</div>
+                                <div class="stat-value">${lang.sttMinutes.toFixed(2)} min</div>
+                                <div class="stat-label" style="margin-top: 5px; color: #667eea;">$${lang.sttCost.toFixed(4)}</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Translation</div>
+                                <div class="stat-value">${lang.translationChars.toLocaleString()} chars</div>
+                                <div class="stat-label" style="margin-top: 5px; color: #667eea;">$${lang.translationCost.toFixed(4)}</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Glossary Translation</div>
+                                <div class="stat-value">${lang.glossaryChars.toLocaleString()} chars</div>
+                                <div class="stat-label" style="margin-top: 5px; color: #667eea;">$${lang.glossaryCost.toFixed(4)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Simulate usage tracking (in production, this would come from the server)
+        async function refreshUsage() {
+            try {
+                // Fetch from database API
+                const response = await fetch('/api/billing/summary');
+                if (response.ok) {
+                    const result = await response.json();
+
+                    // Update sessionData with database values
+                    sessionData.sttMinutes = result.data.totals.sttMinutes;
+                    sessionData.translationChars = result.data.totals.translationChars;
+                    sessionData.glossaryChars = result.data.totals.glossaryChars;
+                    sessionData.languages = result.data.languages;
+
+                    updateDisplay();
+
+                    // Show success message
+                    const today = new Date().toLocaleDateString();
+                    alert(`✅ Usage data refreshed from database!\n\nShowing data for current month.\n\nFor actual Google Cloud billing:\nhttps://console.cloud.google.com/billing`);
+                } else {
+                    throw new Error('Failed to fetch billing data');
+                }
+            } catch (error) {
+                console.error('Failed to refresh usage:', error);
+                // Fall back to localStorage
+                loadSessionData();
+                alert('⚠️ Could not fetch from database.\nShowing cached data from localStorage.\n\nNote: Database may not be configured yet.');
+            }
+        }
+
+        // Fetch project ID from server (optional)
+        async function fetchProjectId() {
+            try {
+                // In production, add an API endpoint to get project info
+                document.getElementById('projectId').textContent = 'mlf-gtranslate';
+            } catch (e) {
+                document.getElementById('projectId').textContent = 'Unknown (check server logs)';
+            }
+        }
+
+        // Listen for usage updates from main app (via localStorage events)
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'gtranslate_billing_session') {
+                loadSessionData();
+            }
+        });
+
+        // Initialize - load from database first, fall back to localStorage
+        async function initializeBillingData() {
+            try {
+                // Try to fetch from database
+                const response = await fetch('/api/billing/summary');
+                if (response.ok) {
+                    const result = await response.json();
+                    sessionData.sttMinutes = result.data.totals.sttMinutes;
+                    sessionData.translationChars = result.data.totals.translationChars;
+                    sessionData.glossaryChars = result.data.totals.glossaryChars;
+                    sessionData.languages = result.data.languages;
+                    sessionData.startTime = Date.now();
+                    updateDisplay();
+                    console.log('✅ Loaded billing data from database');
+                } else {
+                    throw new Error('Database not available');
+                }
+            } catch (error) {
+                console.log('⚠️ Database not available, using localStorage');
+                loadSessionData();
+            }
+        }
+
+        initializeBillingData();
+        fetchProjectId();
+
+        // Auto-refresh from database every 30 seconds
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/billing/summary');
+                if (response.ok) {
+                    const result = await response.json();
+                    sessionData.sttMinutes = result.data.totals.sttMinutes;
+                    sessionData.translationChars = result.data.totals.translationChars;
+                    sessionData.glossaryChars = result.data.totals.glossaryChars;
+                    sessionData.languages = result.data.languages;
+                    updateDisplay();
+                }
+            } catch (error) {
+                // Fall back to localStorage on error
+                loadSessionData();
+            }
+        }, 30000);
+
+        // Expose function for main app to call
+        window.trackUsage = function(type, amount, language) {
+            // Track overall totals
+            switch(type) {
+                case 'stt':
+                    sessionData.sttMinutes += amount;
+                    break;
+                case 'translation':
+                    sessionData.translationChars += amount;
+                    break;
+                case 'glossary':
+                    sessionData.glossaryChars += amount;
+                    break;
+            }
+
+            // Track per-language if language is provided
+            if (language) {
+                if (!sessionData.languages[language]) {
+                    sessionData.languages[language] = {
+                        sttMinutes: 0,
+                        translationChars: 0,
+                        glossaryChars: 0
+                    };
+                }
+
+                switch(type) {
+                    case 'stt':
+                        sessionData.languages[language].sttMinutes += amount;
+                        break;
+                    case 'translation':
+                        sessionData.languages[language].translationChars += amount;
+                        break;
+                    case 'glossary':
+                        sessionData.languages[language].glossaryChars += amount;
+                        break;
+                }
+            }
+
+            updateDisplay();
+        };
+    </script>
+</body>
+</html>
