@@ -228,12 +228,16 @@ const io = socketIo(server, {
             const allowedOrigins = [
                 'http://localhost:3003',
                 'http://127.0.0.1:3003',
-                'https://gtranslate-v4-96dfeefd9842.herokuapp.com'
             ];
 
-            // Also allow Heroku app URL from environment
-            if (process.env.HEROKU_APP_NAME) {
-                allowedOrigins.push(`https://${process.env.HEROKU_APP_NAME}.herokuapp.com`);
+            // Allow any Koyeb app URL
+            if (origin && origin.endsWith('.koyeb.app')) {
+                return callback(null, true);
+            }
+
+            // Also allow app URL from environment (any platform)
+            if (process.env.APP_URL) {
+                allowedOrigins.push(process.env.APP_URL);
             }
 
             if (allowedOrigins.includes(origin)) {
