@@ -817,6 +817,7 @@
         class GTranslateV4Client {
             constructor() {
                 this.socket = null;
+                this.recognition = null;
                 this.audioContext = null;
                 this.mediaStream = null;
                 this.processor = null;
@@ -899,55 +900,29 @@
             checkBrowserCompatibility() {
                 const issues = [];
 
-                // Check for critical features
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    issues.push('❌ MediaDevices API not supported');
-                }
-
-                if (!window.AudioContext && !window.webkitAudioContext) {
-                    issues.push('❌ Web Audio API not supported');
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    issues.push('❌ Web Speech API not supported — please use Chrome or Edge');
                 }
 
                 if (typeof WebSocket === 'undefined') {
                     issues.push('❌ WebSocket not supported');
                 }
 
-                // Check for modern browser features
-                const hasAudioWorklet = typeof AudioWorkletNode !== 'undefined';
-                const hasScriptProcessor = typeof AudioContext !== 'undefined' &&
-                                          AudioContext.prototype.createScriptProcessor;
-
-                if (!hasAudioWorklet && !hasScriptProcessor) {
-                    issues.push('❌ No audio processing API available');
-                }
-
-                // Browser detection
                 const ua = navigator.userAgent;
                 const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor);
-                const isSafari = /Safari/.test(ua) && /Apple/.test(navigator.vendor);
-                const isFirefox = /Firefox/.test(ua);
                 const isEdge = /Edg/.test(ua);
-                const isMobile = /Mobile|Android|iPhone|iPad/.test(ua);
 
-                console.log('Browser Compatibility Check:', {
-                    browser: isChrome ? 'Chrome' : isSafari ? 'Safari' : isFirefox ? 'Firefox' : isEdge ? 'Edge' : 'Unknown',
-                    mobile: isMobile,
-                    hasAudioWorklet,
-                    hasScriptProcessor,
-                    issues
-                });
-
-                // Show warning if compatibility issues found
-                if (issues.length > 0) {
-                    console.error('Browser compatibility issues:', issues);
-                    alert(
-                        'Your browser may not be fully compatible with this application:\n\n' +
-                        issues.join('\n') +
-                        '\n\nPlease use Chrome, Firefox, Safari, or Edge for the best experience.'
-                    );
+                if (!isChrome && !isEdge) {
+                    issues.push('⚠️ For best results, use Chrome or Edge (Web Speech API works best there)');
                 }
 
-                return issues.length === 0;
+                if (issues.length > 0) {
+                    console.warn('Browser compatibility issues:', issues);
+                    const hasErrors = issues.some(i => i.startsWith('❌'));
+                    if (hasErrors) {
+                        alert('Browser compatibility issue:\n\n' + issues.join('\n'));
+                    }
+                }
             }
 
             initElements() {
@@ -1177,15 +1152,12 @@
                     }
                 });
 
-                this.socket.on('streaming-started', (data) => {
-                    console.log('🎤 Streaming started', data);
+                this.socket.on('session-started', (data) => {
+                    console.log('🎤 Session started', data);
                     this.updateStatus('Listening...', 'listening');
 
                     // Store source language for billing tracking
                     this.currentSourceLanguage = data.sourceLanguage;
-
-                    // Start tracking STT time for billing
-                    this.sttStartTime = Date.now();
                 });
 
                 this.socket.on('interim-result', (data) => {
@@ -1229,8 +1201,8 @@
                     }
                 });
 
-                this.socket.on('streaming-stopped', (data) => {
-                    console.log('⏹️ Streaming stopped', data);
+                this.socket.on('session-stopped', (data) => {
+                    console.log('⏹️ Session stopped', data);
                 });
 
                 this.socket.on('recognition-error', (error) => {
@@ -1421,265 +1393,53 @@
                         throw new Error('Invalid audio source');
                     }
 
-                    // Check browser support
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        throw new Error('Your browser does not support audio capture. Please use Chrome, Safari, or Firefox.');
+                    // Start Web Speech API recognition
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if (!SpeechRecognition) {
+                        throw new Error('Web Speech API not supported. Please use Chrome or Edge.');
                     }
 
-                    // Get audio stream based on selected source
-                    if (audioSourceType === 'system') {
-                        // Check if mobile device (system audio not supported on mobile)
-                        const isMobile = /Mobile|Android|iPhone|iPad|iPod/.test(navigator.userAgent);
-                        if (isMobile) {
-                            throw new Error('System audio capture is not available on mobile devices. Please use the Microphone option instead.');
+                    this.recognition = new SpeechRecognition();
+                    this.recognition.lang = sourceLanguage || 'ro-RO';
+                    this.recognition.continuous = true;
+                    this.recognition.interimResults = true;
+                    this.recognition.maxAlternatives = 1;
+
+                    this.recognition.onresult = (event) => {
+                        if (!this.isRecording) return;
+                        for (let i = event.resultIndex; i < event.results.length; i++) {
+                            const transcript = event.results[i][0].transcript;
+                            const isFinal = event.results[i].isFinal;
+                            this.socket.emit('transcript-result', { text: transcript, isFinal });
                         }
+                    };
 
-                        // Capture system audio (tab/screen audio)
-                        if (!navigator.mediaDevices.getDisplayMedia) {
-                            throw new Error('System audio capture not supported on this device. Please select Microphone.');
+                    this.recognition.onend = () => {
+                        // Chrome cuts off after ~60s — auto-restart if still recording
+                        if (this.isRecording) {
+                            console.log('🔄 Web Speech API ended, restarting...');
+                            try { this.recognition.start(); } catch(e) { console.warn('Restart failed:', e); }
                         }
-                        this.mediaStream = await navigator.mediaDevices.getDisplayMedia({
-                            video: true,  // Required for getDisplayMedia
-                            audio: {
-                                echoCancellation: false,
-                                noiseSuppression: false,
-                                autoGainControl: false
-                            }
-                        });
-                        console.log('🖥️ System audio capture granted');
-                    } else {
-                        // Capture microphone (or BlackHole input device)
-                        try {
-                            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                                audio: {
-                                    echoCancellation: false,
-                                    noiseSuppression: false,
-                                    autoGainControl: false,  // Critical: disable auto gain
-                                    sampleRate: 48000,
-                                    channelCount: 1
-                                }
-                            });
-                            console.log('🎤 Microphone access granted');
-                        } catch (micError) {
-                            // Handle specific permission errors
-                            if (micError.name === 'NotAllowedError') {
-                                throw new Error('Microphone permission denied. Please allow microphone access in your browser settings and try again.');
-                            } else if (micError.name === 'NotFoundError') {
-                                throw new Error('No microphone found. Please connect a microphone and try again.');
-                            } else if (micError.name === 'NotReadableError') {
-                                throw new Error('Microphone is already in use by another application. Please close other apps using the microphone and try again.');
-                            } else {
-                                throw micError;
-                            }
+                    };
+
+                    this.recognition.onerror = (event) => {
+                        console.error('Web Speech API error:', event.error);
+                        if (event.error === 'not-allowed') {
+                            this.updateStatus('❌ Microphone permission denied', 'error');
+                            this.stopRecording();
+                        } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                            console.warn('Speech recognition error:', event.error);
                         }
-                    }
+                    };
 
-                    console.log('   Audio tracks:', this.mediaStream.getAudioTracks().length);
-                    console.log('   Track enabled:', this.mediaStream.getAudioTracks()[0]?.enabled);
-                    console.log('   Track settings:', this.mediaStream.getAudioTracks()[0]?.getSettings());
+                    this.recognition.start();
+                    console.log('🎤 Web Speech API started (lang: ' + this.recognition.lang + ')');
 
-                    // Create audio context
-                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-                    console.log('🎧 Audio context created');
-                    console.log('   Sample rate:', this.audioContext.sampleRate);
-                    console.log('   State:', this.audioContext.state);
-
-                    // Fix Safari AudioContext suspended state
-                    if (this.audioContext.state === 'suspended') {
-                        console.log('⚠️ AudioContext is suspended, resuming...');
-                        await this.audioContext.resume();
-                        console.log('✅ AudioContext resumed, state:', this.audioContext.state);
-                    }
-
-                    // Try AudioWorklet first, fallback to ScriptProcessor for older Safari
-                    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-                    console.log('🎤 Media stream source created');
-
-                    // Create gain node to store gain value (used by ScriptProcessor fallback)
-                    // Note: Not connected to audio graph for AudioWorklet (gain applied inside worklet)
-                    this.gainNode = this.audioContext.createGain();
-                    const gainValue = this.micGainSlider && this.micGainSlider.value ?
-                                      parseFloat(this.micGainSlider.value) : 10.0;
-                    this.gainNode.gain.value = gainValue;
-                    console.log(`🎤 Gain value set to ${gainValue.toFixed(1)}x`);
-
-                    // Try AudioWorklet, fallback to ScriptProcessor
-                    let usingWorklet = false;
-                    if (this.audioContext.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
-                        try {
-                            // Load AudioWorklet module only once (prevents memory leak)
-                            if (!this.audioWorkletLoaded) {
-                                await this.audioContext.audioWorklet.addModule('audio-processor.js');
-                                this.audioWorkletLoaded = true;
-                                console.log('✅ AudioWorklet module loaded');
-                            } else {
-                                console.log('✅ AudioWorklet module already loaded (reusing)');
-                            }
-
-                            // Create AudioWorkletNode
-                            this.processor = new AudioWorkletNode(this.audioContext, 'audio-processor');
-                            usingWorklet = true;
-
-                            // Send gain settings to AudioWorklet
-                            const autoGainOn = this.autoGainToggle && this.autoGainToggle.checked;
-                            if (autoGainOn) {
-                                this.processor.port.postMessage({ command: 'setAutoGain', value: true });
-                            } else {
-                                const gainValue = this.micGainSlider && this.micGainSlider.value ?
-                                                  parseFloat(this.micGainSlider.value) : 10.0;
-                                this.processor.port.postMessage({ command: 'setGain', value: gainValue });
-                            }
-
-                            console.log(`✅ Using AudioWorklet for audio processing (autoGain: ${autoGainOn})`);
-                        } catch (workletError) {
-                            console.warn('⚠️ AudioWorklet failed, falling back to ScriptProcessor:', workletError);
-                        }
-                    }
-
-                    // Fallback to ScriptProcessor for Safari < 14.1
-                    // (includes simple AGC for the fallback path)
-                    if (!usingWorklet) {
-                        console.log('⚠️ Using ScriptProcessor fallback (deprecated but widely supported)');
-                        this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
-
-                        // AGC state for ScriptProcessor fallback
-                        let spGain = this.gainNode ? this.gainNode.gain.value : 10.0;
-                        let spLevelSmooth = 0.0;
-                        const spTarget = 0.35;
-
-                        this.processor.onaudioprocess = (event) => {
-                            if (!this.isRecording) return;
-
-                            const inputData = event.inputBuffer.getChannelData(0);
-
-                            // AGC: measure raw peak and adjust gain
-                            if (this.autoGainToggle && this.autoGainToggle.checked) {
-                                let rawPeak = 0;
-                                for (let i = 0; i < inputData.length; i++) {
-                                    const abs = Math.abs(inputData[i]);
-                                    if (abs > rawPeak) rawPeak = abs;
-                                }
-                                spLevelSmooth = spLevelSmooth * 0.9 + rawPeak * 0.1;
-                                if (spLevelSmooth > 0.001) {
-                                    const desired = spTarget / spLevelSmooth;
-                                    const coeff = desired < spGain ? 0.15 : 0.005;
-                                    spGain += (desired - spGain) * coeff;
-                                    spGain = Math.max(1.0, Math.min(60.0, spGain));
-                                }
-                            } else {
-                                spGain = this.gainNode ? this.gainNode.gain.value : 10.0;
-                            }
-
-                            // Apply gain, calculate level, convert to Int16
-                            let maxLevel = 0;
-                            const int16Data = new Int16Array(inputData.length);
-
-                            for (let i = 0; i < inputData.length; i++) {
-                                const amplifiedSample = inputData[i] * spGain;
-                                const absSample = Math.abs(amplifiedSample);
-                                if (absSample > maxLevel) maxLevel = absSample;
-                                const clamped = amplifiedSample < -1 ? -1 : (amplifiedSample > 1 ? 1 : amplifiedSample);
-                                int16Data[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7FFF;
-                            }
-
-                            // Update gain display
-                            if (this.autoGainToggle && this.autoGainToggle.checked) {
-                                this.micGainValue.textContent = spGain.toFixed(1);
-                            }
-
-                            this.updateAudioLevel(maxLevel);
-                            this.socket.emit('audio-data', int16Data.buffer);
-                        };
-                    }
-
-                    // Only setup port message handler for AudioWorklet
-                    if (usingWorklet) {
-                        let messageCount = 0;
-                        this.processor.port.onmessage = (event) => {
-                            if (!this.isRecording) return;
-
-                            const audioData = event.data.audioData;
-                            const level = event.data.level;
-
-                            // Debug first few messages
-                            messageCount++;
-                            if (messageCount <= 5) {
-                                const buffer = new Int16Array(audioData);
-                                const samples = Array.from(buffer.slice(0, 10));
-                                const maxSample = Math.max(...samples.map(s => Math.abs(s)));
-                                const hasAudio = maxSample > 100;
-                                console.log(`📊 AudioWorklet message #${messageCount}:`, {
-                                    byteLength: audioData.byteLength,
-                                    firstSamples: samples,
-                                    maxSample,
-                                    levelFloat: level.toFixed(4),
-                                    hasAudio,
-                                    recommendation: hasAudio ? '✅ Good' : '⚠️ TOO QUIET - Speak louder or check mic volume'
-                                });
-                            }
-
-                            // Update visual level meter
-                            this.updateAudioLevel(level);
-
-                            // Update gain display when auto-gain is active
-                            if (event.data.currentGain !== undefined && this.autoGainToggle && this.autoGainToggle.checked) {
-                                const g = event.data.currentGain;
-                                this.micGainValue.textContent = g.toFixed(1);
-                                this.micGainSlider.value = Math.min(g, parseFloat(this.micGainSlider.max));
-                            }
-
-                            // Send audio data to server
-                            this.socket.emit('audio-data', audioData);
-                        };
-                    }
-
-                    // Force stereo output so TTS plays in both ears
-                    // Without this, mono processor → destination can put iOS audio session in mono mode
-                    this.audioContext.destination.channelCount = 2;
-
-                    // Connect audio graph based on processor type
-                    if (usingWorklet) {
-                        // AudioWorklet: source → processor (gain applied inside worklet) → silent output
-                        // Do NOT use Web Audio gainNode - would apply gain twice (10x × 10x = 100x!)
-                        source.connect(this.processor);
-
-                        // CRITICAL: Connect processor to a GainNode set to 0.001 then to destination
-                        // This keeps the AudioWorklet alive without actually outputting audible sound
-                        // If we don't connect to destination, browser may stop processing audio
-                        // Note: 0.001 is imperceptible even at max volume, but not optimized away by browser
-                        const silentGain = this.audioContext.createGain();
-                        silentGain.gain.value = 0.001; // Nearly silent (avoids browser optimization)
-                        silentGain.channelCount = 2;
-                        silentGain.channelCountMode = 'explicit';
-                        silentGain.channelInterpretation = 'speakers'; // Upmix mono → stereo
-                        this.processor.connect(silentGain);
-                        silentGain.connect(this.audioContext.destination);
-
-                        console.log('🔇 AudioWorklet connected: source → processor → stereo silent output (0.001x)');
-                    } else {
-                        // ScriptProcessor: source → processor (gain applied inside processor code)
-                        // Gain is applied manually in onaudioprocess handler
-                        source.connect(this.processor);
-
-                        const silentStereo = this.audioContext.createGain();
-                        silentStereo.channelCount = 2;
-                        silentStereo.channelCountMode = 'explicit';
-                        silentStereo.channelInterpretation = 'speakers';
-                        this.processor.connect(silentStereo);
-                        silentStereo.connect(this.audioContext.destination);
-
-                        console.log('🔇 ScriptProcessor connected: source → processor → stereo output');
-                    }
-
-                    // Start streaming on server (with validated inputs and mode)
-                    console.log('📤 CLIENT: Sending mode:', this.currentMode, 'interval:', this.translationInterval, 'ms');
-                    this.socket.emit('start-streaming', {
+                    // Tell server to initialize translation session
+                    this.socket.emit('start-session', {
                         sourceLanguage: sourceLanguage,
                         targetLang: targetLang,
-                        translationInterval: this.translationInterval,
-                        mode: this.currentMode,  // Send mode to server for centralized rules
-                        sampleRate: this.audioContext ? this.audioContext.sampleRate : 48000
+                        mode: this.currentMode
                     });
 
                     this.isRecording = true;
@@ -1714,34 +1474,13 @@
                 // Release wake lock - screen can turn off now
                 this.releaseWakeLock();
 
-                if (this.gainNode) {
-                    this.gainNode.disconnect();
-                    this.gainNode = null;
+                if (this.recognition) {
+                    this.recognition.onend = null; // Prevent auto-restart
+                    this.recognition.stop();
+                    this.recognition = null;
                 }
 
-                if (this.processor) {
-                    // Send stop message to AudioWorklet (only if it has a port)
-                    if (this.processor.port) {
-                        this.processor.port.postMessage({ command: 'stop' });
-                    }
-                    this.processor.disconnect();
-                    this.processor = null;
-                }
-
-                if (this.audioContext) {
-                    this.audioContext.close();
-                    this.audioContext = null;
-                    this.audioWorkletLoaded = false; // Reset flag so new AudioContext can load module
-                }
-
-                if (this.mediaStream) {
-                    this.mediaStream.getTracks().forEach(track => track.stop());
-                    this.mediaStream = null;
-                }
-
-                this.audioChunkBuffer = [];
-
-                this.socket.emit('stop-streaming');
+                this.socket.emit('stop-session');
 
                 this.startBtn.disabled = false;
                 this.stopBtn.disabled = true;
