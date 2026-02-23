@@ -147,9 +147,19 @@ const translateClient = googleCredentials
 const projectId = googleCredentials?.project_id || credentialsProjectId || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT;
 const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
 const parent = projectId ? `projects/${projectId}/locations/${location}` : null;
-const glossaryId = 'ro-en-religious-terms';
-const glossaryPath = parent ? `${parent}/glossaries/${glossaryId}` : null;
+// Two unidirectional glossaries — one per translation direction.
+// Both contain the same 734 JW domain entries; the en→ro one has columns swapped.
+const roEnGlossaryPath = parent ? `${parent}/glossaries/ro-en-religious-terms` : null;
+const enRoGlossaryPath = parent ? `${parent}/glossaries/en-ro-religious-terms` : null;
 const glossaryEnabled = process.env.GLOSSARY_ENABLED === 'true'; // opt-in only: set GLOSSARY_ENABLED=true to enable
+
+// Helper: pick the right glossary path for a given translation direction
+function getGlossaryPath(sourceLangCode, targetLangCode) {
+    if (!glossaryEnabled) return null;
+    if (sourceLangCode === 'ro' && targetLangCode === 'en') return roEnGlossaryPath;
+    if (sourceLangCode === 'en' && targetLangCode === 'ro') return enRoGlossaryPath;
+    return null; // no glossary for other language pairs
+}
 const translationModel = process.env.TRANSLATION_MODEL || 'advanced';
 
 if (!projectId) {
@@ -166,7 +176,8 @@ logger.info('✅ Google Cloud Translation v3 client initialized', {
     location,
     translationModel,
     glossaryEnabled,
-    glossaryPath: glossaryEnabled ? glossaryPath : 'disabled'
+    roEnGlossary: glossaryEnabled ? roEnGlossaryPath : 'disabled',
+    enRoGlossary: glossaryEnabled ? enRoGlossaryPath : 'disabled',
 });
 
 // Log startup configuration
@@ -373,15 +384,14 @@ async function translateWithRetry(text, targetLang, sourceLanguage, clientId, ma
         throw new Error('Source language is required for translation');
     }
 
-    let useGlossary = glossaryEnabled && glossaryPath;
+    // Pick direction-appropriate glossary (ro→en or en→ro; null for other pairs)
+    const sourceLangCode = sourceLanguage.includes('-')
+        ? sourceLanguage.split('-')[0]
+        : sourceLanguage;
+    let activeGlossaryPath = getGlossaryPath(sourceLangCode, targetLang);
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            // Extract language code (e.g., 'ro' from 'ro-RO')
-            const sourceLangCode = sourceLanguage.includes('-')
-                ? sourceLanguage.split('-')[0]
-                : sourceLanguage;
-
             // Build translation request
             const request = {
                 parent: parent,
@@ -398,17 +408,21 @@ async function translateWithRetry(text, targetLang, sourceLanguage, clientId, ma
             }
             // For 'advanced', omit model parameter to use Google's best available model
 
-            // Add glossary if enabled and available (for domain-specific terms like religious terminology)
-            if (useGlossary) {
+            // Add direction-appropriate glossary if available
+            if (activeGlossaryPath) {
                 request.glossaryConfig = {
-                    glossary: glossaryPath,
-                    ignoreCase: true  // Case-insensitive for Romanian religious terms (Dumnezeu vs dumnezeu)
+                    glossary: activeGlossaryPath,
+                    ignoreCase: true  // Case-insensitive for JW domain terms
                 };
-                logger.debug('Using glossary for translation', { glossaryPath, clientId });
+                logger.debug('Using glossary for translation', { glossaryPath: activeGlossaryPath, clientId });
             }
 
             const [response] = await translateClient.translateText(request);
-            const translation = response.translations[0].translatedText;
+
+            // When a glossary was applied, prefer glossary_translations (glossary-aware result)
+            const translation = (activeGlossaryPath && response.glossaryTranslations?.length)
+                ? response.glossaryTranslations[0].translatedText
+                : response.translations[0].translatedText;
 
             return translation;
         } catch (error) {
@@ -421,13 +435,13 @@ async function translateWithRetry(text, targetLang, sourceLanguage, clientId, ma
                                    errorCode === '5'; // NOT_FOUND code
 
             // If glossary error on first attempt with glossary, retry without glossary
-            if (isGlossaryError && useGlossary) {
+            if (isGlossaryError && activeGlossaryPath) {
                 logger.warn('Glossary not found or error, retrying without glossary', {
                     clientId,
-                    glossaryPath,
+                    glossaryPath: activeGlossaryPath,
                     error: errorMessage
                 });
-                useGlossary = false;
+                activeGlossaryPath = null;
                 // Don't count this as a retry attempt - try again immediately
                 attempt--;
                 continue;
@@ -455,7 +469,7 @@ async function translateWithRetry(text, targetLang, sourceLanguage, clientId, ma
                     code: error.code,
                     sourceLanguage,
                     targetLang,
-                    usedGlossary: useGlossary
+                    usedGlossary: !!activeGlossaryPath
                 });
                 throw error;
             }
