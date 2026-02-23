@@ -1,7 +1,7 @@
 /**
- * GTranslate V4 Server
- * Real-time speech translation using Google Cloud Speech-to-Text API
- * Stream proactively restarts at 290s (Google Cloud limit is ~305s)
+ * BudgetTranslate Server
+ * Real-time speech translation using Web Speech API (browser-side STT)
+ * and Google Cloud Translation v3 (within free tier)
  */
 
 const express = require('express');
@@ -27,7 +27,6 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS || '50');
 const MAX_CONNECTIONS_PER_IP = parseInt(process.env.MAX_CONNECTIONS_PER_IP || '5');
 const INACTIVITY_TIMEOUT = parseInt(process.env.INACTIVITY_TIMEOUT || String(30 * 60 * 1000));
-const MAX_AUDIO_CHUNK_SIZE = 1024 * 1024; // 1MB per chunk
 
 // ===== LOGGING SETUP =====
 const LOG_DIR = path.join(__dirname, 'logs');
@@ -936,7 +935,7 @@ io.on('connection', (socket) => {
                         sourceLanguage: currentLanguage,
                         targetLanguage: targetLanguage,
                         reason: decision.reason,
-                        appVersion: 'v160'
+                        appVersion: 'v1'
                     }).catch(() => {}); // Non-fatal
                 }
             }
@@ -1105,7 +1104,7 @@ io.on('connection', (socket) => {
 // ===== START SERVER =====
 server.listen(PORT, async () => {
     logger.info('═══════════════════════════════════════');
-    logger.info('🎉 GTranslate V4 - Google Cloud Speech');
+    logger.info('🎉 BudgetTranslate - Web Speech API');
     logger.info('═══════════════════════════════════════');
     logger.info(`🌐 Server: http://localhost:${PORT}`);
     logger.info('🎤 Speech Recognition: Web Speech API (browser-side)');
