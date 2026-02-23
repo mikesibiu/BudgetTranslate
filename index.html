@@ -1405,8 +1405,11 @@
                     this.recognition.interimResults = true;
                     this.recognition.maxAlternatives = 1;
 
+                    this.lastSpeechResultTime = Date.now();
+
                     this.recognition.onresult = (event) => {
                         if (!this.isRecording) return;
+                        this.lastSpeechResultTime = Date.now(); // Reset watchdog
                         for (let i = event.resultIndex; i < event.results.length; i++) {
                             const transcript = event.results[i][0].transcript;
                             const isFinal = event.results[i].isFinal;
@@ -1418,6 +1421,7 @@
                         // Chrome cuts off after ~60s — auto-restart if still recording
                         if (this.isRecording) {
                             console.log('🔄 Web Speech API ended, restarting...');
+                            this.lastSpeechResultTime = Date.now(); // Reset watchdog on restart
                             try { this.recognition.start(); } catch(e) { console.warn('Restart failed:', e); }
                         }
                     };
@@ -1431,6 +1435,24 @@
                             console.warn('Speech recognition error:', event.error);
                         }
                     };
+
+                    // Watchdog: if Chrome silently stalls (no onend fires, just stops delivering
+                    // results), restart after 45 seconds of silence. 45s chosen to avoid false
+                    // positives during prayers/songs which can run 2-3 minutes — the no-speech
+                    // error + onend loop handles those; this only catches true silent stalls.
+                    this.speechWatchdog = setInterval(() => {
+                        if (!this.isRecording) return;
+                        const silentMs = Date.now() - this.lastSpeechResultTime;
+                        if (silentMs > 45000) {
+                            console.warn('⚠️ Watchdog: no results for 45s — forcing recognition restart');
+                            this.lastSpeechResultTime = Date.now();
+                            try {
+                                this.recognition.stop(); // triggers onend → restart
+                            } catch(e) {
+                                console.warn('Watchdog restart failed:', e);
+                            }
+                        }
+                    }, 10000);
 
                     this.recognition.start();
                     console.log('🎤 Web Speech API started (lang: ' + this.recognition.lang + ')');
@@ -1473,6 +1495,11 @@
 
                 // Release wake lock - screen can turn off now
                 this.releaseWakeLock();
+
+                if (this.speechWatchdog) {
+                    clearInterval(this.speechWatchdog);
+                    this.speechWatchdog = null;
+                }
 
                 if (this.recognition) {
                     this.recognition.onend = null; // Prevent auto-restart
