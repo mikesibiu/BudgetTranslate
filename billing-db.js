@@ -26,7 +26,7 @@ function initializeDatabase(logger) {
         pool = new Pool({
             connectionString,
             ssl: process.env.NODE_ENV === 'production' ? {
-                rejectUnauthorized: false
+                rejectUnauthorized: true
             } : false,
             max: 10, // Maximum connections in pool
             idleTimeoutMillis: 30000,

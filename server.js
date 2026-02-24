@@ -13,6 +13,7 @@ const path = require('path');
 const fs = require('fs');
 const billingDb = require('./billing-db');
 const TranslationRulesEngine = require('./translation-rules-engine');
+const session = require('express-session');
 
 // ===== CONFIGURATION =====
 // Load environment variables if .env file exists
@@ -27,6 +28,19 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const MAX_CONNECTIONS = parseInt(process.env.MAX_CONNECTIONS || '50');
 const MAX_CONNECTIONS_PER_IP = parseInt(process.env.MAX_CONNECTIONS_PER_IP || '5');
 const INACTIVITY_TIMEOUT = parseInt(process.env.INACTIVITY_TIMEOUT || String(30 * 60 * 1000));
+
+const APP_PASSWORD = process.env.APP_PASSWORD || null;
+const sessionMiddleware = session({
+    secret: process.env.SESSION_SECRET || 'budgettranslate-dev-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        secure: NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    }
+});
 
 // ===== LOGGING SETUP =====
 const LOG_DIR = path.join(__dirname, 'logs');
@@ -193,6 +207,9 @@ logger.info('Server Configuration', {
 const app = express();
 const server = http.createServer(app);
 
+app.set('trust proxy', 1);
+app.use(sessionMiddleware);
+
 // Security headers middleware
 app.use((req, res, next) => {
     // Content Security Policy
@@ -260,11 +277,38 @@ const io = socketIo(server, {
     pingInterval: 25000
 });
 
-app.get('/', (req, res) => {
+io.engine.use(sessionMiddleware);
+
+function requireAuth(req, res, next) {
+    if (!APP_PASSWORD) return next();
+    if (req.session && req.session.authenticated) return next();
+    if (req.path && req.path.startsWith('/api/')) return res.status(401).json({ error: 'Authentication required' });
+    res.redirect('/login');
+}
+
+app.get('/login', (req, res) => {
+    if (!APP_PASSWORD || (req.session && req.session.authenticated)) return res.redirect('/');
+    res.sendFile(path.join(__dirname, 'login.html'));
+});
+
+app.post('/login', express.urlencoded({ extended: false }), (req, res) => {
+    const password = (req.body && req.body.password) || '';
+    if (APP_PASSWORD && password === APP_PASSWORD) {
+        req.session.authenticated = true;
+        return res.redirect('/');
+    }
+    res.redirect('/login?error=1');
+});
+
+app.get('/logout', (req, res) => {
+    req.session.destroy(() => res.redirect('/login'));
+});
+
+app.get('/', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.get('/billing', (req, res) => {
+app.get('/billing', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'billing.html'));
 });
 
@@ -274,16 +318,14 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-        connections: activeConnections,
-        env: NODE_ENV
+        timestamp: new Date().toISOString()
     });
 });
 
 // ===== BILLING API ENDPOINTS =====
 
 // Track usage (called from client)
-app.post('/api/billing/track', express.json(), async (req, res) => {
+app.post('/api/billing/track', requireAuth, express.json(), async (req, res) => {
     try {
         const { type, amount, language } = req.body;
 
@@ -321,7 +363,7 @@ app.post('/api/billing/track', express.json(), async (req, res) => {
 });
 
 // Get usage summary
-app.get('/api/billing/summary', async (req, res) => {
+app.get('/api/billing/summary', requireAuth, async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
 
@@ -344,7 +386,7 @@ app.get('/api/billing/summary', async (req, res) => {
 });
 
 // Get daily usage for charts
-app.get('/api/billing/daily', async (req, res) => {
+app.get('/api/billing/daily', requireAuth, async (req, res) => {
     try {
         const days = parseInt(req.query.days || '30');
 
@@ -491,8 +533,18 @@ let activeConnections = 0;
 const connectionsByIp = new Map(); // Track connections per IP
 
 io.on('connection', (socket) => {
-    // Get client IP address
-    const clientIp = socket.handshake.address || socket.conn.remoteAddress;
+    // Reject unauthenticated socket connections
+    if (APP_PASSWORD && !(socket.request.session && socket.request.session.authenticated)) {
+        socket.emit('connection-error', { message: 'Authentication required', code: 'UNAUTHORIZED' });
+        socket.disconnect(true);
+        return;
+    }
+
+    // Get client IP address (trust proxy: read x-forwarded-for behind Heroku/Koyeb)
+    const xForwardedFor = socket.handshake.headers['x-forwarded-for'];
+    const clientIp = xForwardedFor
+        ? xForwardedFor.split(',')[0].trim()
+        : (socket.handshake.address || socket.conn.remoteAddress);
 
     // Check global connection limit
     if (activeConnections >= MAX_CONNECTIONS) {
