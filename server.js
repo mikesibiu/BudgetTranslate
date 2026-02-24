@@ -248,6 +248,7 @@ const io = socketIo(server, {
             const allowedOrigins = [
                 'http://localhost:3003',
                 'http://127.0.0.1:3003',
+                'https://freetranslate.farace.net',
             ];
 
             // Allow any Koyeb app URL
