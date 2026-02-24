@@ -664,6 +664,64 @@ io.on('connection', (socket) => {
     }
 
     /**
+     * Verify religious proper nouns survived translation correctly (en→ro direction).
+     *
+     * When translating English to Romanian, Google may produce incorrect variants of
+     * JW proper nouns (e.g. 'Jehova' instead of 'Iehova', 'Biblie' instead of 'Biblia').
+     * This function patches known bad variants to the authoritative Romanian JW form.
+     *
+     * Only runs when targetLang is 'ro'. Ported from PhraseTranslation's
+     * _verify_religious_terms().
+     */
+    function verifyReligiousTerms(translated, sourceText, targetLang) {
+        if (targetLang !== 'ro') return translated;
+
+        // English trigger term → canonical Romanian JW form
+        const religiousTerms = {
+            'jehovah':  'Iehova',
+            'satan':    'Satana',
+            'bible':    'Biblia',
+            'jesus':    'Isus',
+            'christ':   'Hristos',
+            'god':      'Dumnezeu',
+            'devil':    'diavolul',
+            'kingdom':  'regatul',
+            'heaven':   'cerul',
+            'prayer':   'rugăciune',
+            'faith':    'credință',
+        };
+
+        // Canonical Romanian form → incorrect variants Google may produce
+        const romanianVariants = {
+            'Iehova':    ['Iehvoa', 'Ievhova', 'Jehova'],
+            'Satana':    ['Satan'],
+            'Isus':      ['Iisus'],
+            'Hristos':   ['Cristos', 'Christos'],
+            'Dumnezeu':  ['Dumnezău'],
+            'Biblia':    ['Biblie'],
+            'diavolul':  ['diavol'],
+            'regatul':   ['regat'],
+            'cerul':     ['cer'],
+            'rugăciune': ['rugăciunea'],
+            'credință':  ['credința'],
+        };
+
+        const sourceLower = sourceText.toLowerCase();
+        let result = translated;
+
+        for (const [engTerm, roTerm] of Object.entries(religiousTerms)) {
+            if (sourceLower.includes(engTerm)) {
+                for (const variant of (romanianVariants[roTerm] || [])) {
+                    const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    result = result.replace(new RegExp(escaped, 'gi'), roTerm);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * Preserve numbers from source text to avoid numeric drift in translation.
      */
     function preserveSourceNumbers(sourceText, translatedText) {
@@ -884,6 +942,7 @@ io.on('connection', (socket) => {
             // ── Step 3: Post-processing ──
             // Apply domain term mappings using fullText for source-aware fixes
             emitted = applyTermMappings(emitted, fullText);
+            emitted = verifyReligiousTerms(emitted, fullText, targetLanguage);
             emitted = preserveSourceNumbers(newText, emitted);
             emitted = preserveDates(newText, emitted);
 
