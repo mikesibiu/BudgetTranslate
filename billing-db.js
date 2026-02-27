@@ -207,13 +207,13 @@ async function getDailyUsage(days = 30) {
             usage_type,
             SUM(amount) as total_amount
         FROM billing_usage
-        WHERE session_date >= CURRENT_DATE - INTERVAL '${days} days'
+        WHERE session_date >= CURRENT_DATE - ($1 * INTERVAL '1 day')
         GROUP BY session_date, usage_type
         ORDER BY session_date DESC, usage_type
     `;
 
     try {
-        const result = await pool.query(query);
+        const result = await pool.query(query, [days]);
 
         // Group by date
         const dailyUsage = {};
@@ -256,11 +256,11 @@ async function purgeOldData(days = 90, logger) {
 
     const query = `
         DELETE FROM billing_usage
-        WHERE created_at < CURRENT_DATE - INTERVAL '${days} days'
+        WHERE created_at < CURRENT_DATE - ($1 * INTERVAL '1 day')
     `;
 
     try {
-        const result = await pool.query(query);
+        const result = await pool.query(query, [days]);
         const deletedCount = result.rowCount;
 
         if (deletedCount > 0) {

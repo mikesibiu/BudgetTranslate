@@ -30,6 +30,12 @@ const MAX_CONNECTIONS_PER_IP = parseInt(process.env.MAX_CONNECTIONS_PER_IP || '5
 const INACTIVITY_TIMEOUT = parseInt(process.env.INACTIVITY_TIMEOUT || String(30 * 60 * 1000));
 
 const APP_PASSWORD = process.env.APP_PASSWORD || null;
+
+// Guard: SESSION_SECRET must be set in production — hardcoded fallback is a security hole
+if (NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+    console.error('FATAL: SESSION_SECRET environment variable is not set. Refusing to start in production.');
+    process.exit(1);
+}
 const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET || 'budgettranslate-dev-secret',
     resave: false,
@@ -601,6 +607,7 @@ io.on('connection', (socket) => {
     let inactivityTimer = null;
     const INACTIVITY_TIMEOUT_MS = INACTIVITY_TIMEOUT; // Use config value
     let translationInFlight = false; // Prevent concurrent translations (race condition fix)
+    let pendingTranslation = null; // Deferred final translation waiting for in-flight to complete
     let translationRules = null; // Centralized translation rules engine
     let currentMode = 'talks'; // Persist selected mode across restarts
     let lastTextChangeTime = Date.now(); // Track when text last changed for pause detection
@@ -642,6 +649,7 @@ io.on('connection', (socket) => {
     // Helper function to clean up session state
     function cleanupSession() {
         translationInFlight = false;
+        pendingTranslation = null; // Discard any deferred translation
         lastTranslatedText = '';
         lastInterimText = '';
 
@@ -871,8 +879,8 @@ io.on('connection', (socket) => {
      * HOW IT WORKS:
      *   Normalizes both strings (lowercase, strips edge punctuation per word), then counts
      *   how many words at the START of translatedFull match committedTranslation.
-     *   If ≥60% match, treat that prefix as "committed" and return the tail.
-     *   If <60%, return null — caller falls back to chunk-only translation.
+     *   If ≥75% match, treat that prefix as "committed" and return the tail.
+     *   If <75%, return null — caller emits the full translation (full context preserved).
      *
      * KEY FIX vs v155:
      *   Caller must set committedTranslation = translatedFull (not += emitted).
@@ -881,7 +889,7 @@ io.on('connection', (socket) => {
      *
      * @param {string} translatedFull - Translation of the full STT transcript
      * @param {string} committedTranslation - Full translation from the previous call
-     * @returns {string|null} New tail to emit, or null if LCP ratio < 60%
+     * @returns {string|null} New tail to emit, or null if LCP ratio < 75%
      */
     function extractByWordLCP(translatedFull, committedTranslation) {
         const trimmedFull = translatedFull.trim();
@@ -913,7 +921,7 @@ io.on('connection', (socket) => {
         }
 
         const matchRatio = matchCount / committedNorm.length;
-        if (matchRatio < 0.6) return null; // LCP match failed
+        if (matchRatio < 0.75) return null; // LCP match failed (threshold: 75%)
 
         const tail = fullOrigWords.slice(matchCount).join(' ').trim();
         return tail || null;
@@ -968,7 +976,7 @@ io.on('connection', (socket) => {
                     usedLCP = true;
                     logger.debug('✂️ LCP extraction succeeded', { clientId, tailWords: tail.split(/\s+/).length });
                 } else {
-                    logger.info('⚠️ LCP extraction failed (<60% match) — falling back to chunk translation', {
+                    logger.info('⚠️ LCP extraction failed (<75% match) — emitting full translation', {
                         clientId,
                         committedPreview: committedTranslation.substring(0, 60),
                         fullPreview: translatedFull.substring(0, 60)
@@ -980,10 +988,11 @@ io.on('connection', (socket) => {
                 usedLCP = true;
             }
 
-            // ── Fallback: chunk-only translation when LCP fails ──
+            // ── Fallback: LCP failed — emit full translation (full context preserved) ──
+            // Never translate chunks in isolation: a decontextualized fragment loses grammatical
+            // context and produces broken English ("speaking like a foreigner").
             if (!emitted) {
-                const chunkTranslated = await translateWithRetry(newText, targetLanguage, currentLanguage, clientId);
-                emitted = chunkTranslated.trim();
+                emitted = translatedFull.trim();
             }
 
             // ── KEY FIX: committedTranslation = translatedFull (not += emitted) ──
@@ -1082,6 +1091,15 @@ io.on('connection', (socket) => {
             });
         } finally {
             translationInFlight = false;
+            // Run any pending final translation that was deferred while we were in-flight
+            if (pendingTranslation && sessionActive) {
+                const { transcript: pt, decision: pd } = pendingTranslation;
+                pendingTranslation = null;
+                logger.info('▶️ Running deferred pending translation', { clientId, preview: pt.substring(0, 60) });
+                performTranslation(pt, pd, true).catch(err => {
+                    logger.error('Deferred translation error', { clientId, error: err.message });
+                });
+            }
         }
     }
 
@@ -1151,6 +1169,11 @@ io.on('connection', (socket) => {
         if (decision.shouldTranslate) {
             if (translationInFlight) {
                 logger.debug('⏳ Translation in flight, deferring', { clientId });
+                // For final results, save the latest deferred translation to run after in-flight completes
+                if (isFinal) {
+                    pendingTranslation = { transcript: text, decision };
+                    logger.info('📋 Queued pending final translation', { clientId, preview: text.substring(0, 60) });
+                }
             } else {
                 if (restartStreamTimer) {
                     clearTimeout(restartStreamTimer);

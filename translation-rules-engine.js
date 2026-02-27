@@ -273,11 +273,11 @@ class TranslationRulesEngine {
                 return true;
             }
 
-            // Substring check (one contains the other with >90% overlap)
+            // Substring check (one contains the other with ≥65% overlap)
             if (entryNormalized.includes(normalized) || normalized.includes(entryNormalized)) {
                 const overlap = Math.min(entryNormalized.length, normalized.length) /
                                Math.max(entryNormalized.length, normalized.length);
-                if (overlap >= 0.8) {
+                if (overlap >= 0.65) {
                     this.logger.info(`🚫 POST-TRANSLATION DUPLICATE: ${(overlap * 100).toFixed(1)}% substring overlap`, {
                         translation: normalized.substring(0, 50)
                     });
@@ -285,10 +285,10 @@ class TranslationRulesEngine {
                 }
             }
 
-            // Word overlap check (80% threshold for translated output)
+            // Word overlap check (65% threshold for translated output — was 80%, too aggressive)
             const wordOverlap = this.calculateOverlap(entryNormalized, normalized);
-            if (wordOverlap >= 0.8) {
-                this.logger.info(`🚫 POST-TRANSLATION DUPLICATE: ${(wordOverlap * 100).toFixed(1)}% word overlap (threshold: 80%)`, {
+            if (wordOverlap >= 0.65) {
+                this.logger.info(`🚫 POST-TRANSLATION DUPLICATE: ${(wordOverlap * 100).toFixed(1)}% word overlap (threshold: 65%)`, {
                     translation: normalized.substring(0, 50)
                 });
                 return true;
