@@ -643,7 +643,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌐 BudgetTranslate <span style="color: #999; font-size: 0.4em; font-weight: normal;">v2</span></h1>
+            <h1>🌐 BudgetTranslate <span style="color: #999; font-size: 0.4em; font-weight: normal;">v3</span></h1>
             <p>Real-time Speech Translation powered by Google Cloud</p>
             <div class="badge">No Timeout • Unlimited Duration</div>
             <div style="margin-top: 10px;">
@@ -2053,10 +2053,16 @@
                 // Find best voice based on user preference
                 let preferredVoice;
 
-                if (this.selectedVoice) {
-                    // User selected a specific voice from dropdown - use it directly
-                    preferredVoice = this.selectedVoice;
-                    console.log(`🔊 Using user-selected voice: ${preferredVoice.name} [${preferredVoice.lang}]`);
+                if (this.voicePreference && this.voicePreference !== 'auto') {
+                    // User selected a specific voice — look up fresh each time since voice objects
+                    // go stale after Web Speech API restarts (Chrome invalidates the old references)
+                    preferredVoice = allVoices.find(v => v.name === this.voicePreference) || null;
+                    if (preferredVoice) {
+                        this.selectedVoice = preferredVoice; // keep in sync
+                        console.log(`🔊 Using user-selected voice: ${preferredVoice.name} [${preferredVoice.lang}]`);
+                    } else {
+                        console.warn(`⚠️ Saved voice "${this.voicePreference}" not found — falling back to auto`);
+                    }
                 } else if (this.voicePreference === 'auto') {
                     // Auto mode - prioritize most natural sounding
                     preferredVoice =
