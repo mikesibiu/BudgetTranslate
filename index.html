@@ -643,7 +643,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌐 BudgetTranslate <span style="color: #999; font-size: 0.4em; font-weight: normal;">v3</span></h1>
+            <h1>🌐 BudgetTranslate <span style="color: #999; font-size: 0.4em; font-weight: normal;">v4</span></h1>
             <p>Real-time Speech Translation powered by Google Cloud</p>
             <div class="badge">No Timeout • Unlimited Duration</div>
             <div style="margin-top: 10px;">
@@ -661,7 +661,6 @@
                     <label for="audioSource">Audio Source</label>
                     <select id="audioSource">
                         <option value="microphone">🎤 Microphone</option>
-                        <option value="system">🖥️ System Audio (Tab/Screen)</option>
                     </select>
                 </div>
             </div>
@@ -1389,7 +1388,7 @@
                         throw new Error('Invalid translation interval');
                     }
 
-                    if (!['microphone', 'system'].includes(audioSourceType)) {
+                    if (audioSourceType !== 'microphone') {
                         throw new Error('Invalid audio source');
                     }
 
