@@ -643,7 +643,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌐 BudgetTranslate <span style="color: #999; font-size: 0.4em; font-weight: normal;">v4</span></h1>
+            <h1>🌐 BudgetTranslate <span style="color: #999; font-size: 0.4em; font-weight: normal;">v5</span></h1>
             <p>Real-time Speech Translation powered by Google Cloud</p>
             <div class="badge">No Timeout • Unlimited Duration</div>
             <div style="margin-top: 10px;">
@@ -819,6 +819,9 @@
                 this.recognition = null;
                 this.audioContext = null;
                 this.mediaStream = null;
+                this.levelStream = null;
+                this.analyserNode = null;
+                this.levelAnimFrame = null;
                 this.processor = null;
                 this.isRecording = false;
                 this.translationCount = 0;
@@ -1160,19 +1163,13 @@
                 });
 
                 this.socket.on('interim-result', (data) => {
-                    const sourceText = sanitizeText(data.text);
+                    const hasRecentTranslation = this.lastTranslation &&
+                        (Date.now() - this.lastTranslationTime < 20000);
 
-                    if (this.ttsEnabled || this.currentMode === 'earbuds') {
-                        const hasRecentTranslation = this.lastTranslation &&
-                            (Date.now() - this.lastTranslationTime < 20000);
-
-                        if (hasRecentTranslation) {
-                            this.interimText.textContent = `${this.lastTranslation}...`;
-                        } else {
-                            this.interimText.textContent = 'Listening...';
-                        }
+                    if (hasRecentTranslation) {
+                        this.interimText.textContent = `${this.lastTranslation}...`;
                     } else {
-                        this.interimText.textContent = sourceText || 'Listening...';
+                        this.interimText.textContent = 'Listening...';
                     }
                 });
 
@@ -1464,6 +1461,7 @@
                     });
 
                     this.isRecording = true;
+                    this.startAudioLevelMonitor();
                     this.translationCount = 0;
                     this.wordsTranslated = 0;
                     this.resultsContainer.innerHTML = '';
@@ -1483,6 +1481,7 @@
 
             stopRecording() {
                 this.isRecording = false;
+                this.stopAudioLevelMonitor();
 
                 // Track STT usage for billing
                 if (this.sttStartTime && this.currentSourceLanguage) {
@@ -2163,6 +2162,53 @@
 
                 // Speak
                 this.speechSynthesis.speak(utterance);
+            }
+
+            async startAudioLevelMonitor() {
+                try {
+                    this.levelStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    this.audioContext = new AudioContext();
+                    const source = this.audioContext.createMediaStreamSource(this.levelStream);
+                    this.analyserNode = this.audioContext.createAnalyser();
+                    this.analyserNode.fftSize = 256;
+                    source.connect(this.analyserNode);
+                    const levelData = new Uint8Array(this.analyserNode.frequencyBinCount);
+                    const tick = () => {
+                        if (!this.isRecording) return;
+                        this.analyserNode.getByteTimeDomainData(levelData);
+                        let sumSq = 0;
+                        for (let i = 0; i < levelData.length; i++) {
+                            const v = (levelData[i] - 128) / 128;
+                            sumSq += v * v;
+                        }
+                        const rms = Math.sqrt(sumSq / levelData.length);
+                        this.updateAudioLevel(Math.min(rms * 5, 1.0));
+                        this.levelAnimFrame = requestAnimationFrame(tick);
+                    };
+                    this.levelAnimFrame = requestAnimationFrame(tick);
+                } catch (e) {
+                    console.warn('Audio level monitor unavailable:', e);
+                }
+            }
+
+            stopAudioLevelMonitor() {
+                if (this.levelAnimFrame) {
+                    cancelAnimationFrame(this.levelAnimFrame);
+                    this.levelAnimFrame = null;
+                }
+                if (this.analyserNode) {
+                    this.analyserNode.disconnect();
+                    this.analyserNode = null;
+                }
+                if (this.audioContext) {
+                    this.audioContext.close();
+                    this.audioContext = null;
+                }
+                if (this.levelStream) {
+                    this.levelStream.getTracks().forEach(t => t.stop());
+                    this.levelStream = null;
+                }
+                this.updateAudioLevel(0);
             }
 
             updateAudioLevel(level) {
