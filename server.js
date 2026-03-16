@@ -672,6 +672,8 @@ io.on('connection', (socket) => {
      * @param {string} sourceText - Original Romanian source text (used for context-aware fixes)
      */
     function applyTermMappings(text, sourceText = '') {
+        const sourceNorm = sourceText.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
         const mappings = [
             { pattern: /\bvestitori\b/gi, replacement: 'publishers' },
             { pattern: /\bMartorii lui Iehova\b/gi, replacement: "Jehovah's Witnesses" },
@@ -690,7 +692,7 @@ io.on('connection', (socket) => {
         // Source-aware fix: "congregație" → "congregation" (not "church").
         // Google Translate sometimes returns "church" for "congregație" in religious contexts.
         // JW terminology strictly uses "congregation", never "church".
-        if (/congregați/i.test(sourceText)) {
+        if (/congregati/i.test(sourceNorm)) {
             result = result.replace(/\bchurch\b/gi, 'congregation');
             result = result.replace(/\bchurches\b/gi, 'congregations');
         }
@@ -719,6 +721,24 @@ io.on('connection', (socket) => {
         // If source contains "bunătate" and output has "money", it's the STT error.
         if (/bun[ăa]tate/i.test(sourceText)) {
             result = result.replace(/\bmoney\b/gi, 'kindness');
+        }
+
+        // Source-aware fix: "cu siguranță" = certainly/surely (adverb), NOT "safety" (noun).
+        if (/cu\s+siguranta/i.test(sourceNorm)) {
+            result = result.replace(/\bSafety\b/g, 'Certainly');
+            result = result.replace(/\bsafety\b/g, 'certainly');
+        }
+
+        // Source-aware fix: "conștiință curată" = clean conscience.
+        if (/constiinta/i.test(sourceNorm)) {
+            result = result.replace(/\bcleanse\s+conscience\b/gi, 'clean conscience');
+        }
+
+        // Source-aware fix: "adunare" = congregation (local) or assembly (circuit/district).
+        // Google Translate maps "adunare" to "gathering" which is incorrect in JW context.
+        if (/\badunare\b/i.test(sourceText)) {
+            result = result.replace(/\bgathering\b/gi, 'congregation');
+            result = result.replace(/\bgatherings\b/gi, 'congregations');
         }
 
         return result;
@@ -771,7 +791,7 @@ io.on('connection', (socket) => {
         let result = translated;
 
         for (const [engTerm, roTerm] of Object.entries(religiousTerms)) {
-            if (sourceLower.includes(engTerm)) {
+            if (new RegExp('\\b' + engTerm + '\\b').test(sourceLower)) {
                 for (const variant of (romanianVariants[roTerm] || [])) {
                     const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     result = result.replace(new RegExp(escaped, 'gi'), roTerm);
@@ -897,10 +917,11 @@ io.on('connection', (socket) => {
         if (!trimmedCommitted) return trimmedFull;
         if (!trimmedFull) return null;
 
-        // Normalize: split on whitespace, strip leading/trailing punctuation, lowercase
+        // Normalize: split on whitespace, strip leading/trailing punctuation, lowercase.
+        // Use \p{L}\p{N} unicode property escapes so Romanian diacritics are preserved.
         const normalizeWords = (s) =>
             s.split(/\s+/)
-             .map(w => w.toLowerCase().replace(/^[^\w]+|[^\w]+$/g, ''))
+             .map(w => w.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
              .filter(w => w.length > 0);
 
         const committedNorm = normalizeWords(trimmedCommitted);

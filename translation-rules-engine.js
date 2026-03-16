@@ -37,8 +37,12 @@ class TranslationRulesEngine {
         this.FILLER_WORDS = new Set([
             // English
             'uh', 'um', 'ah', 'hmm', 'eh', 'er', 'like', 'you know',
-            // Romanian
-            'ă', 'e', 'ei', 'păi', 'deci', 'adică'
+            // Romanian — basic hedges
+            'ă', 'e', 'ei', 'păi', 'deci', 'adică',
+            // Romanian — discourse markers and affirmative fillers
+            'bine', 'da', 'ok', 'exact', 'uite', 'cum',
+            // Romanian — formal "you know / you see" equivalents
+            'știți', 'știi', 'vedeți'
         ]);
     }
 
