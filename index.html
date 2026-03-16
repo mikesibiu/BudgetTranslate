@@ -643,7 +643,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌐 BudgetTranslate <span style="color: #999; font-size: 0.4em; font-weight: normal;">v6</span></h1>
+            <h1>🌐 BudgetTranslate <span style="color: #999; font-size: 0.4em; font-weight: normal;">v7</span></h1>
             <p>Real-time Speech Translation powered by Google Cloud</p>
             <div class="badge">No Timeout • Unlimited Duration</div>
             <div style="margin-top: 10px;">
@@ -955,15 +955,23 @@
                 this.stopBtn.addEventListener('click', () => this.stopRecording());
                 this.exportBtn.addEventListener('click', () => this.exportSession());
 
-                // Re-acquire wake lock when page becomes visible again
+                // Re-acquire wake lock and resume synthesis when page becomes visible again
                 document.addEventListener('visibilitychange', async () => {
-                    if (!document.hidden && this.isRecording && 'wakeLock' in navigator) {
-                        // Page became visible again while recording - re-acquire wake lock
-                        console.log('📱 Page visible again - re-acquiring wake lock');
-                        try {
-                            await this.requestWakeLock();
-                        } catch (err) {
-                            console.warn('⚠️ Could not re-acquire wake lock on visibility change:', err.message);
+                    if (!document.hidden) {
+                        // Chrome pauses speechSynthesis when tab is backgrounded — resume it
+                        if (this.ttsEnabled && this.speechSynthesis && this.speechSynthesis.paused) {
+                            console.log('📱 Page visible — resuming paused speechSynthesis');
+                            this.speechSynthesis.resume();
+                        }
+
+                        if (this.isRecording && 'wakeLock' in navigator) {
+                            // Page became visible again while recording - re-acquire wake lock
+                            console.log('📱 Page visible again - re-acquiring wake lock');
+                            try {
+                                await this.requestWakeLock();
+                            } catch (err) {
+                                console.warn('⚠️ Could not re-acquire wake lock on visibility change:', err.message);
+                            }
                         }
                     }
                 });
@@ -1163,6 +1171,11 @@
                 });
 
                 this.socket.on('interim-result', (data) => {
+                    if (this.currentMode === 'earbuds') {
+                        // Show live STT text in earbuds mode so user can confirm mic is working
+                        this.interimText.textContent = data.text ? `Hearing: ${data.text}...` : 'Listening...';
+                        return;
+                    }
                     const hasRecentTranslation = this.lastTranslation &&
                         (Date.now() - this.lastTranslationTime < 20000);
 
@@ -1882,6 +1895,17 @@
                 // Start processing queue if not already speaking
                 if (!this.isSpeaking) {
                     this.processNextInQueue();
+                } else {
+                    // Watchdog: Chrome synthesis can silently crash leaving isSpeaking stuck true.
+                    // If we've been "speaking" for >25s with no onend event, reset and restart.
+                    const stuckMs = this._speakStartTime ? Date.now() - this._speakStartTime : 0;
+                    if (stuckMs > 25000) {
+                        console.warn(`⚠️ [TTS] isSpeaking stuck for ${Math.round(stuckMs / 1000)}s — Chrome synthesis may have crashed, resetting`);
+                        this.isSpeaking = false;
+                        this._speakStartTime = 0;
+                        this.speechSynthesis.cancel();
+                        this.processNextInQueue();
+                    }
                 }
             }
 
@@ -2013,6 +2037,7 @@
                 // Get next item from queue
                 const { text, targetLanguage } = this.ttsQueue.shift();
                 this.isSpeaking = true;
+                this._speakStartTime = Date.now(); // Watchdog timestamp
 
                 // Note: Already added to recentlySpoken in speakTranslation() to prevent race conditions
                 // Don't add again here or we'll have duplicates in the tracking array
@@ -2159,6 +2184,11 @@
                     // Continue to next item even on error
                     this.processNextInQueue();
                 };
+
+                // Chrome bug: synthesis can get stuck in paused state when tab is backgrounded
+                if (this.speechSynthesis.paused) {
+                    this.speechSynthesis.resume();
+                }
 
                 // Speak
                 this.speechSynthesis.speak(utterance);
