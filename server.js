@@ -320,6 +320,30 @@ app.get('/billing', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'billing.html'));
 });
 
+app.get('/client-utils.js', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'client-utils.js'));
+});
+
+app.get('/client.js', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'client.js'));
+});
+
+app.get('/client-audio.js', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'client-audio.js'));
+});
+
+app.get('/client-session.js', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'client-session.js'));
+});
+
+app.get('/client-tts.js', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'client-tts.js'));
+});
+
+app.get('/client-init.js', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'client-init.js'));
+});
+
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.get('/health', (req, res) => {
