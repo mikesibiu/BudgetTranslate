@@ -3,6 +3,9 @@
 
 Object.assign(GTranslateV4Client.prototype, {
     async requestWakeLock() {
+        // Release any existing sentinel before acquiring a new one (prevents double-sentinel leak)
+        await this.releaseWakeLock();
+
         // Request screen wake lock to keep screen on during recording
         // Critical for mobile EarBuds mode where user listens with screen off
         if ('wakeLock' in navigator) {
@@ -195,6 +198,7 @@ Object.assign(GTranslateV4Client.prototype, {
             });
 
             this.isRecording = true;
+            this.sttStartTime = Date.now(); // Start STT billing timer
             this.startAudioLevelMonitor();
             this.translationCount = 0;
             this.wordsTranslated = 0;

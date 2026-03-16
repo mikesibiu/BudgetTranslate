@@ -378,8 +378,15 @@ Object.assign(GTranslateV4Client.prototype, {
         };
 
         utterance.onerror = (event) => {
+            // 'interrupted' and 'canceled' fire when speechSynthesis.cancel() is called deliberately
+            // (e.g. stop button, tab switch). These are not real errors — skip silently.
+            if (event.error === 'interrupted' || event.error === 'canceled') {
+                this.isSpeaking = false;
+                return;
+            }
             console.error('🔊 Speech synthesis error:', event.error);
             // Continue to next item even on error
+            this.isSpeaking = false;
             this.processNextInQueue();
         };
 

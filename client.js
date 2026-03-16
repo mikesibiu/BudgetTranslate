@@ -61,6 +61,10 @@ class GTranslateV4Client {
             console.log(`🎤 Loaded saved voice preference: ${this.voicePreference}`);
         }
 
+        // STT billing tracking
+        this.sttStartTime = null;
+        this.currentSourceLanguage = null;
+
         // Screen Wake Lock (keep screen on during recording)
         this.wakeLock = null;
 
@@ -388,8 +392,8 @@ class GTranslateV4Client {
 
             this.addTranslation(data);
 
-            // Track translation usage for billing
-            if (data.translated && this.currentSourceLanguage) {
+            // Track translation usage for billing (only on final translations to avoid double-counting)
+            if (!data.isInterim && data.translated && this.currentSourceLanguage) {
                 const charCount = data.translated.length;
                 // Assume glossary is used if available (you could enhance this with actual glossary status)
                 const useGlossary = false; // Set to true when glossary is confirmed enabled
@@ -447,7 +451,8 @@ class GTranslateV4Client {
                 this.currentMode = option.dataset.mode;
 
                 // Update translation interval
-                this.translationInterval = parseInt(option.dataset.interval);
+                const parsed = parseInt(option.dataset.interval, 10);
+                this.translationInterval = isNaN(parsed) ? 8000 : parsed;
 
                 // Handle TTS auto-enable for EarBuds mode
                 const enableTTS = option.dataset.enableTts === 'true';
@@ -480,7 +485,7 @@ class GTranslateV4Client {
 
         // Display translations on screen (ALL modes including EarBuds)
         this.translationCount++;
-        this.wordsTranslated += data.original.split(/\s+/).length;
+        this.wordsTranslated += (data.original || '').split(/\s+/).filter(Boolean).length;
 
         this.translationCountEl.textContent = `${this.translationCount} translations`;
         this.wordsTranslatedEl.textContent = this.wordsTranslated;
