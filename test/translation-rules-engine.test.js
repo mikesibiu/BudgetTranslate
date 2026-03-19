@@ -90,6 +90,33 @@ describe('TranslationRulesEngine', () => {
             expect(quality.meetsMinimum).to.be.true;
             expect(quality.isFillerOnly).to.be.false;
         });
+
+        it('isFinal=true: 3-word text passes (threshold 3 not 6)', () => {
+            const quality = engine.checkQuality('prin regatul ceresc', true, false);
+            expect(quality.meetsMinimum).to.be.true;
+        });
+
+        it('isFinal=true: 2-word text rejects (standalone isFinal threshold is 3)', () => {
+            const quality = engine.checkQuality('Amin bine', true, false);
+            expect(quality.meetsMinimum).to.be.false;
+            expect(quality.reason).to.equal('too_few_words');
+        });
+
+        it('isContinuationTail=true: 2-word text passes (threshold 2)', () => {
+            const quality = engine.checkQuality('cu bucurie', true, true);
+            expect(quality.meetsMinimum).to.be.true;
+        });
+
+        it('isContinuationTail=true: 1-word text rejects (threshold 2)', () => {
+            const quality = engine.checkQuality('Amin', true, true);
+            expect(quality.meetsMinimum).to.be.false;
+            expect(quality.reason).to.equal('too_few_words');
+        });
+
+        it('6-word newText with isContinuationTail=false uses isFinal threshold (3), passes', () => {
+            const quality = engine.checkQuality('cu mare bucurie si pace bine', true, false);
+            expect(quality.meetsMinimum).to.be.true;
+        });
     });
 
     describe('Sentence Ending Detection', () => {
@@ -258,6 +285,75 @@ describe('TranslationRulesEngine', () => {
 
             expect(decision.shouldTranslate).to.be.false;
             expect(decision.reason).to.equal('filler_words_only');
+        });
+
+        it('isFinal 3-word standalone fragment passes (threshold 3, not 6)', () => {
+            const decision = engine.shouldTranslate({
+                text: 'prin regatul ceresc',
+                isFinal: true,
+                timeSinceLastChange: 1000,
+                trigger: 'final',
+                clientId: 'test-123'
+            });
+
+            expect(decision.shouldTranslate).to.be.true;
+            expect(decision.reason).to.equal('final_result');
+        });
+
+        it('isFinal 2-word fragment rejects (standalone isFinal threshold is 3)', () => {
+            const decision = engine.shouldTranslate({
+                text: 'Amin bine',
+                isFinal: true,
+                timeSinceLastChange: 1000,
+                trigger: 'final',
+                clientId: 'test-123'
+            });
+
+            expect(decision.shouldTranslate).to.be.false;
+            expect(decision.reason).to.equal('too_few_words');
+        });
+
+        it('continuation tail: 2-word isFinal tail passes after interval fired mid-utterance', () => {
+            engine.lastTranslatedText = 'acesta este textul lung bine minunat';
+            const decision = engine.shouldTranslate({
+                text: 'acesta este textul lung bine minunat cu bucurie',
+                isFinal: true,
+                timeSinceLastChange: 0,
+                trigger: 'final',
+                clientId: 'test-123'
+            });
+
+            expect(decision.shouldTranslate).to.be.true;
+            expect(decision.reason).to.equal('final_result');
+        });
+
+        it('continuation tail: 1-word isFinal tail still rejects (isContinuationTail threshold is 2)', () => {
+            engine.lastTranslatedText = 'acesta este textul lung bine minunat';
+            const decision = engine.shouldTranslate({
+                text: 'acesta este textul lung bine minunat Amin',
+                isFinal: true,
+                timeSinceLastChange: 0,
+                trigger: 'final',
+                clientId: 'test-123'
+            });
+
+            expect(decision.shouldTranslate).to.be.false;
+            expect(decision.reason).to.equal('too_few_words');
+        });
+
+        it('continuation tail cap: 6-word remainder not classified as tail (uses isFinal threshold 3, passes)', () => {
+            // newWordCount=6 > 5 cap → isContinuationTail=false → minWords=3 (isFinal) → passes
+            engine.lastTranslatedText = 'acesta este textul lung';
+            const decision = engine.shouldTranslate({
+                text: 'acesta este textul lung cu mare bucurie si pace',
+                isFinal: true,
+                timeSinceLastChange: 0,
+                trigger: 'final',
+                clientId: 'test-123'
+            });
+
+            expect(decision.shouldTranslate).to.be.true;
+            expect(decision.reason).to.equal('final_result');
         });
     });
 

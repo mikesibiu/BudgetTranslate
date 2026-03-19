@@ -103,8 +103,18 @@ class TranslationRulesEngine {
         // Extract new text that hasn't been translated yet
         const newText = this.getNewText(context.text);
 
+        // Detect continuation tail: isFinal fired after interval already translated part of this
+        // utterance — newText is the short remainder. Needs a lower word threshold than full interim.
+        // Word-count cap (≤5): prevents misfiring when a new utterance happens to share a prefix
+        // with lastTranslatedText and getNewText() extracts a non-trivial "remainder".
+        const newWordCount = newText.trim().split(/\s+/).filter(Boolean).length;
+        const isContinuationTail = context.isFinal &&
+            newText.length > 0 &&
+            newWordCount <= 5 &&
+            newText.trim().toLowerCase() !== context.text.trim().toLowerCase();
+
         // Run quality checks
-        const qualityCheck = this.checkQuality(newText, context.isFinal);
+        const qualityCheck = this.checkQuality(newText, context.isFinal, isContinuationTail);
 
         // Detect sentence endings
         const hasSentenceEnding = this.detectSentenceEnding(context.text);
@@ -329,7 +339,7 @@ class TranslationRulesEngine {
     /**
      * Check text quality (minimum words, characters, filler detection)
      */
-    checkQuality(text, isFinal = false) {
+    checkQuality(text, isFinal = false, isContinuationTail = false) {
         const trimmedText = text.trim();
 
         if (trimmedText.length === 0) {
@@ -342,7 +352,14 @@ class TranslationRulesEngine {
 
         // Word count check (most specific - check first)
         const words = trimmedText.split(/\s+/).filter(w => w.length > 0);
-        if (words.length < this.MIN_WORDS_FOR_TRANSLATION) {
+        // Confirmed speech uses lower thresholds; speculative interim chunks use the full 6.
+        // - isContinuationTail (interval fired mid-utterance, isFinal fires with short remainder):
+        //   threshold 2 — the tail is always confirmed speech even if just 2 words.
+        // - isFinal standalone (utterance boundary splits sentence into short fragment):
+        //   threshold 3 — confirmed speech.
+        // - interim: full 6-word threshold to avoid noise/filler bursts.
+        const minWords = isContinuationTail ? 2 : (isFinal ? 3 : this.MIN_WORDS_FOR_TRANSLATION);
+        if (words.length < minWords) {
             return {
                 meetsMinimum: false,
                 isFillerOnly: false,
@@ -365,7 +382,9 @@ class TranslationRulesEngine {
         }
 
         // Character count check (sanity check - least specific)
-        if (trimmedText.length < this.MIN_CHARS_FOR_TRANSLATION) {
+        // Skip for isFinal and continuation tails: word-count guard already covers them,
+        // and a 2-word tail like "Amin." (short chars) is real confirmed speech.
+        if (!isFinal && !isContinuationTail && trimmedText.length < this.MIN_CHARS_FOR_TRANSLATION) {
             return {
                 meetsMinimum: false,
                 isFillerOnly: false,
