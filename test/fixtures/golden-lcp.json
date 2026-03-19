@@ -1,0 +1,80 @@
+[
+  {
+    "description": "normal continuation — last 3 words are new",
+    "committed": "we can look at the connection between congregation and edification",
+    "full": "we can look at the connection between congregation and edification and its role",
+    "expectedTail": "and its role"
+  },
+  {
+    "description": "article insertion absorbed by window — 'congregation' → 'the congregation'",
+    "committed": "we can look at the connection between congregation and edification",
+    "full": "we can look at the connection between the congregation and edification and its role",
+    "expectedTail": "and its role"
+  },
+  {
+    "description": "single synonym swap absorbed — 'connection' → 'contact'",
+    "committed": "we can look at the connection between congregation and edification and its role",
+    "full": "we can look at the contact between congregation and edification and its role in our lives",
+    "expectedTail": "in our lives"
+  },
+  {
+    "description": "synonym swap at position 0 — first word differs",
+    "committed": "The congregation will grow through faith and dedication",
+    "full": "This congregation will grow through faith and dedication and love",
+    "expectedTail": "and love"
+  },
+  {
+    "description": "prayer ending — short tail 'Amin' after long committed (greedy scan matches most, tail extracted)",
+    "committed": "we thank you Jehovah for everything you have done for us in this meeting",
+    "full": "we thank you Jehovah for everything you have done for us in this meeting Amin",
+    "expectedTail": "Amin"
+  },
+  {
+    "description": "scripture reference with colon — should not break tokenization",
+    "committed": "Paul writes in Romans 12:1 we should present our bodies",
+    "full": "Paul writes in Romans 12:1 we should present our bodies as a living sacrifice",
+    "expectedTail": "as a living sacrifice"
+  },
+  {
+    "description": "triple synonym swap (connection→contact, congregate→congregation, edify→edification) — match ratio 66.7% < 75%, returns null",
+    "committed": "we can also look at the point of connection between congregate and edify their role",
+    "full": "we can also look at the point of contact between the congregation and to edification plus more content",
+    "expectedTail": null
+  },
+  {
+    "description": "greedy scan: three diffs at start, remaining 6/8 words match = 75% — tail extracted (greedy is resilient)",
+    "committed": "alpha bravo charlie delta echo foxtrot golf hotel",
+    "full": "ALPHA BETA GAMMA delta echo foxtrot golf hotel india juliet",
+    "expectedTail": "india juliet"
+  },
+  {
+    "description": "committed longer than full — full is a subset, returns null (nothing new)",
+    "committed": "we thank you Jehovah for your love and guidance and support and wisdom",
+    "full": "we thank you Jehovah for your love",
+    "expectedTail": null
+  },
+  {
+    "description": "em-dash in full translation — punctuation token excluded from both arrays, index alignment preserved",
+    "committed": "Hello world today",
+    "full": "Hello — world today more content here",
+    "expectedTail": "more content here"
+  },
+  {
+    "description": "ellipsis token in full translation — excluded, indices stay aligned",
+    "committed": "waiting for the answer from Jehovah",
+    "full": "waiting for the answer ... from Jehovah and his kingdom",
+    "expectedTail": "and his kingdom"
+  },
+  {
+    "description": "fully new content (no prefix match) — LCP match ratio < 75%, returns null",
+    "committed": "they are pursuing their goals they are praying",
+    "full": "differently but you show us honor you do not hold each accountable we thank you",
+    "expectedTail": null
+  },
+  {
+    "description": "match ratio exactly at 75% boundary — should extract tail (≥75% passes)",
+    "committed": "one two three four",
+    "full": "one two three DIFFERENT plus more words",
+    "expectedTail": "DIFFERENT plus more words"
+  }
+]

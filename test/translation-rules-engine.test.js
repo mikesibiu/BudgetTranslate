@@ -850,5 +850,57 @@ describe('TranslationRulesEngine', () => {
             // CRITICAL: Must detect duplicate even though source texts differ
             expect(isDuplicate).to.be.true;
         });
+
+        // ── 65% threshold boundary tests ──────────────────────────────────────────────
+        it('65% threshold: 70% word overlap IS a duplicate (above threshold)', () => {
+            const engine = new TranslationRulesEngine('talks', mockLogger);
+            engine.recordTranslatedOutput('one two three four five six seven eight nine ten');
+            expect(engine.isTranslationDuplicate(
+                'one two three four five six seven alpha beta gamma'
+            )).to.be.true;
+        });
+
+        it('65% threshold: 60% word overlap is NOT a duplicate (below threshold)', () => {
+            const engine = new TranslationRulesEngine('talks', mockLogger);
+            engine.recordTranslatedOutput('one two three four five six seven eight nine ten');
+            expect(engine.isTranslationDuplicate(
+                'one two three four five six alpha beta gamma delta'
+            )).to.be.false;
+        });
+
+        it('65% threshold: exactly 65% word overlap IS blocked (>= not >)', () => {
+            const engine = new TranslationRulesEngine('talks', mockLogger);
+            const base = 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty';
+            engine.recordTranslatedOutput(base);
+            expect(engine.isTranslationDuplicate(
+                'one two three four five six seven eight nine ten eleven twelve thirteen A B C D E F G'
+            )).to.be.true;
+        });
+    });
+
+    describe('Pre-Translation Duplicate Detection (getNewText overlap)', () => {
+        it('70% word overlap in source → getNewText returns empty (suppressed)', () => {
+            const engine = new TranslationRulesEngine('talks', mockLogger);
+            engine.lastTranslatedText = 'one two three four five six seven eight nine ten';
+            const result = engine.getNewText('one two three four five six seven alpha beta gamma');
+            expect(result).to.equal('');
+        });
+
+        it('60% word overlap in source → getNewText returns full text (passes through)', () => {
+            const engine = new TranslationRulesEngine('talks', mockLogger);
+            engine.lastTranslatedText = 'one two three four five six seven eight nine ten';
+            const result = engine.getNewText('one two three four five six alpha beta gamma delta');
+            expect(result).to.equal('one two three four five six alpha beta gamma delta');
+        });
+
+        it('exactly 65% overlap in source → getNewText passes through (> not >=)', () => {
+            const engine = new TranslationRulesEngine('talks', mockLogger);
+            const base = 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty';
+            engine.lastTranslatedText = base;
+            const newText = 'one two three four five six seven eight nine ten eleven twelve thirteen A B C D E F G';
+            const result = engine.getNewText(newText);
+            expect(result).to.equal(newText);
+        });
     });
 });
+
