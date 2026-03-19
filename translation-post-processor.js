@@ -312,39 +312,52 @@ function extractByWordLCP(translatedFull, committedTranslation) {
     if (committedNorm.length === 0) return trimmedFull;
     if (fullNorm.length <= committedNorm.length) return null;
 
-    // Fuzzy prefix scan: allow ~1 substitution per 15 committed words.
-    // Google Translate occasionally swaps synonyms (e.g. "would"→"will") between
-    // calls, which breaks strict prefix matching and forces a full re-emit of
-    // already-shown content. Allowing a small number of substitutions absorbs
-    // these one-word variations without treating them as genuine divergence.
+    // Greedy subsequence scan with bounded lookahead window.
     //
-    // COUPLING NOTE: MAX_SUBSTITUTIONS and the 0.75 ratio threshold below are
-    // interdependent. At 4 committed words, MAX_SUBSTITUTIONS=1 and the exact-only
-    // ratio requires 3/4=75% exact matches. Changing either constant independently
-    // may violate the other's assumptions — adjust both together.
-    const MAX_SUBSTITUTIONS = Math.max(1, Math.floor(committedNorm.length / 15));
+    // Problem: Google Translate non-determinism produces translations that differ in
+    // multiple scattered ways: inserted/deleted articles ("the"), word-form changes
+    // ("congregate"→"congregation"), synonym swaps ("connection"→"contact"). Strict
+    // prefix matching breaks on the first difference; a substitution budget (previous
+    // fix) is exhausted after 1-2 scattered changes in a 30-word sequence, so the
+    // ratio drops below 75% and the entire full text is re-emitted as a duplicate.
+    //
+    // Solution: for each committed word, search for it in fullNorm within a small
+    // lookahead window starting at the current scan position. If found, advance the
+    // scan cursor past it. If not found (deleted or substituted in full), skip the
+    // committed word without advancing the scan cursor — the 75% match threshold
+    // still guards against genuine divergence.
+    //
+    // The tail starts immediately after the last matched full-position, so skipped
+    // committed words and inserted full words between matched positions are absorbed
+    // into the "committed prefix" region and do not re-appear in the output.
+    //
+    // WINDOW=3 handles up to 3 consecutive word insertions in full between any two
+    // consecutive matched committed words (e.g. multiple articles/prepositions).
+    const WINDOW = 3;
     let matchCount = 0;
-    let substitutions = 0;
+    let lastMatchedInFull = -1;
     let iInFull = 0;
-    for (let iInCommitted = 0; iInCommitted < committedNorm.length; iInCommitted++) {
+
+    for (let iCommitted = 0; iCommitted < committedNorm.length; iCommitted++) {
         if (iInFull >= fullNorm.length) break;
-        if (fullNorm[iInFull] === committedNorm[iInCommitted]) {
-            matchCount++;
-            iInFull++;
-        } else if (substitutions < MAX_SUBSTITUTIONS) {
-            substitutions++;
-            iInFull++;
-        } else {
-            break;
+        const searchEnd = Math.min(iInFull + WINDOW + 1, fullNorm.length);
+        for (let j = iInFull; j < searchEnd; j++) {
+            if (fullNorm[j] === committedNorm[iCommitted]) {
+                matchCount++;
+                lastMatchedInFull = j;
+                iInFull = j + 1;
+                break;
+            }
         }
+        // If not found in window: committed word was deleted or substituted in full.
+        // Don't advance iInFull — retry from same position for the next committed word.
     }
 
-    // Threshold uses exact matches only — substitutions don't count toward the 75% bar.
-    // This keeps the quality gate strict while absorbing single-word synonym drift.
     const matchRatio = matchCount / committedNorm.length;
     if (matchRatio < 0.75) return null;
+    if (lastMatchedInFull < 0) return null;
 
-    const tail = fullOrigWords.slice(iInFull).join(' ').trim();
+    const tail = fullOrigWords.slice(lastMatchedInFull + 1).join(' ').trim();
     return tail || null;
 }
 

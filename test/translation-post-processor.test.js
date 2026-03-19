@@ -71,18 +71,18 @@ describe('extractByWordLCP', () => {
     describe('75% threshold boundary', () => {
         it('returns tail when match ratio is exactly 75% (3 of 4 words)', () => {
             // committed = 4 words: "one two three four"
-            // full starts with: "one two three X ..." — 3 exact / 4 committed = 75% → success.
-            // Fuzzy: "four"→"DIFFERENT" is a substitution, so iInFull advances past
-            // "DIFFERENT" — it is NOT included in the tail (treated as already-shown).
+            // full = "one two three DIFFERENT plus more words"
+            // Greedy scan: "one","two","three" match. "four" not found in window [3..5]
+            // → skipped. lastMatchedInFull=2, tail starts at full[3] = "DIFFERENT plus more words".
             const result = extractByWordLCP(
                 'one two three DIFFERENT plus more words',
                 'one two three four'
             );
-            expect(result).to.equal('plus more words');
+            expect(result).to.equal('DIFFERENT plus more words');
         });
 
         it('returns null when match ratio is below 75% (2 of 4 words = 50%)', () => {
-            // committed = 4 words; 2 exact matches, then substitution exhausted → 2/4 = 50% < 75%
+            // "one","two" match. "three","four" not found in window → 2/4 = 50% < 75% → null.
             const result = extractByWordLCP(
                 'one two completely different sentence here',
                 'one two three four'
@@ -95,23 +95,39 @@ describe('extractByWordLCP', () => {
             expect(result).to.be.null;
         });
 
-        it('fuzzy: substitution at position 0 still passes if rest match (≥75% exact)', () => {
-            // Word 1 is a synonym swap; words 2-8 match exactly → 7/8 = 87.5% → passes.
-            // The substituted word (position 0) is consumed and not in the tail.
+        it('greedy scan: synonym swap at position 0 absorbed, rest match', () => {
+            // "would" not in window → skipped. "be" found at full[1], rest match → 7/8 = 87.5%.
             const committed = 'would be nice to have that feature implemented';
             const full      = 'will be nice to have that feature implemented now';
             const result = extractByWordLCP(full, committed);
             expect(result).to.equal('now');
         });
 
-        it('fuzzy: single synonym swap (would→will) does not re-emit already-shown content', () => {
-            // Regression: Google Translate swaps "would"→"will" between calls.
-            // Without fuzzy matching: LCP breaks at word 2, ratio=1/8=12% → null → full text emitted → repeat.
-            // With fuzzy matching: substitution absorbed, tail = only new words.
+        it('greedy scan: single synonym swap does not re-emit already-shown content', () => {
+            // "would" not found → skipped. "be" matched at full[2] (after "will"). 7/8 = 87.5%.
             const committed = 'It would be nice to have that feature';
-            const full     = 'It will be nice to have that feature plus more context';
+            const full      = 'It will be nice to have that feature plus more context';
             const result = extractByWordLCP(full, committed);
             expect(result).to.equal('plus more context');
+        });
+
+        it('greedy scan: article insertion in full absorbed by window', () => {
+            // full inserts "the" before "maintenance" — window finds "maintenance" 1 ahead.
+            const committed = 'maintenance instructors serve as an important point';
+            const full      = 'the maintenance instructors serve as an important point of this';
+            const result = extractByWordLCP(full, committed);
+            expect(result).to.equal('of this');
+        });
+
+        it('greedy scan: multiple scattered diffs (production regression — triple repeat)', () => {
+            // Mirrors screenshot bug: "connection"→"contact" (synonym), "the" inserted,
+            // "congregate"→"congregation" (word form) — 3 differences in 13 committed words.
+            // Old approach: exhausted budget after 1st diff → 58% < 75% → null → repeat.
+            // Greedy scan: skips unfound words, matches through window → 11/13 = 84.6% ✓.
+            const committed = 'we can look at point of connection between congregate and edify their role';
+            const full      = 'we can look at point of contact between the congregation and edify their role plus more content';
+            const result = extractByWordLCP(full, committed);
+            expect(result).to.equal('plus more content');
         });
     });
 
