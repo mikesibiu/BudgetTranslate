@@ -119,6 +119,20 @@ describe('extractByWordLCP', () => {
             expect(result).to.equal('of this');
         });
 
+        it('greedy scan: standalone punctuation tokens in full do not cause index misalignment', () => {
+            const committed = 'Hello world today';
+            const full      = 'Hello — world today more';
+            const result = extractByWordLCP(full, committed);
+            expect(result).to.equal('more');
+        });
+
+        it('greedy scan: three consecutive substitutions fail below 75% (WINDOW does not false-pass)', () => {
+            const committed = 'one two three four five six seven eight';
+            const full      = 'one two ALPHA BETA GAMMA six seven eight extra';
+            const result = extractByWordLCP(full, committed);
+            expect(result).to.be.null;
+        });
+
         it('greedy scan: multiple scattered diffs (production regression — triple repeat)', () => {
             // Mirrors screenshot bug: "connection"→"contact" (synonym), "the" inserted,
             // "congregate"→"congregation" (word form) — 3 differences in 13 committed words.

@@ -300,14 +300,27 @@ function extractByWordLCP(translatedFull, committedTranslation) {
     // Normalize: split on whitespace, strip leading/trailing punctuation, lowercase.
     // Use \p{L}\p{N} (unicode property escapes) so Romanian diacritics (ă, â, î, ș, ț)
     // are preserved as word characters and not stripped by the boundary replace.
+    const normalizeWord = (w) => w.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
     const normalizeWords = (s) =>
         s.split(/\s+/)
-         .map(w => w.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+         .map(normalizeWord)
          .filter(w => w.length > 0);
 
     const committedNorm = normalizeWords(trimmedCommitted);
-    const fullNorm = normalizeWords(trimmedFull);
-    const fullOrigWords = trimmedFull.split(/\s+/);
+
+    // Build fullNorm and fullOrigWords together so their indices always align.
+    // Pure-punctuation tokens (e.g. em-dash "—", "...") normalize to empty string and
+    // must be excluded from BOTH arrays — otherwise lastMatchedInFull (a fullNorm index)
+    // would be used to slice fullOrigWords at the wrong position.
+    const fullNorm = [];
+    const fullOrigWords = [];
+    for (const token of trimmedFull.split(/\s+/)) {
+        const norm = normalizeWord(token);
+        if (norm.length > 0) {
+            fullNorm.push(norm);
+            fullOrigWords.push(token);
+        }
+    }
 
     if (committedNorm.length === 0) return trimmedFull;
     if (fullNorm.length <= committedNorm.length) return null;
@@ -355,7 +368,6 @@ function extractByWordLCP(translatedFull, committedTranslation) {
 
     const matchRatio = matchCount / committedNorm.length;
     if (matchRatio < 0.75) return null;
-    if (lastMatchedInFull < 0) return null;
 
     const tail = fullOrigWords.slice(lastMatchedInFull + 1).join(' ').trim();
     return tail || null;
