@@ -71,16 +71,18 @@ describe('extractByWordLCP', () => {
     describe('75% threshold boundary', () => {
         it('returns tail when match ratio is exactly 75% (3 of 4 words)', () => {
             // committed = 4 words: "one two three four"
-            // full starts with: "one two three X ..." — 3/4 = 75% — should succeed
+            // full starts with: "one two three X ..." — 3 exact / 4 committed = 75% → success.
+            // Fuzzy: "four"→"DIFFERENT" is a substitution, so iInFull advances past
+            // "DIFFERENT" — it is NOT included in the tail (treated as already-shown).
             const result = extractByWordLCP(
                 'one two three DIFFERENT plus more words',
                 'one two three four'
             );
-            expect(result).to.equal('DIFFERENT plus more words');
+            expect(result).to.equal('plus more words');
         });
 
         it('returns null when match ratio is below 75% (2 of 4 words = 50%)', () => {
-            // committed = 4 words, only 2 match prefix → 50% < 75%
+            // committed = 4 words; 2 exact matches, then substitution exhausted → 2/4 = 50% < 75%
             const result = extractByWordLCP(
                 'one two completely different sentence here',
                 'one two three four'
@@ -91,6 +93,25 @@ describe('extractByWordLCP', () => {
         it('returns null when first word does not match (0%)', () => {
             const result = extractByWordLCP('Totally different text here', 'Hello world');
             expect(result).to.be.null;
+        });
+
+        it('fuzzy: substitution at position 0 still passes if rest match (≥75% exact)', () => {
+            // Word 1 is a synonym swap; words 2-8 match exactly → 7/8 = 87.5% → passes.
+            // The substituted word (position 0) is consumed and not in the tail.
+            const committed = 'would be nice to have that feature implemented';
+            const full      = 'will be nice to have that feature implemented now';
+            const result = extractByWordLCP(full, committed);
+            expect(result).to.equal('now');
+        });
+
+        it('fuzzy: single synonym swap (would→will) does not re-emit already-shown content', () => {
+            // Regression: Google Translate swaps "would"→"will" between calls.
+            // Without fuzzy matching: LCP breaks at word 2, ratio=1/8=12% → null → full text emitted → repeat.
+            // With fuzzy matching: substitution absorbed, tail = only new words.
+            const committed = 'It would be nice to have that feature';
+            const full     = 'It will be nice to have that feature plus more context';
+            const result = extractByWordLCP(full, committed);
+            expect(result).to.equal('plus more context');
         });
     });
 
