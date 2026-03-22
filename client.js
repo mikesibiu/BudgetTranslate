@@ -40,6 +40,12 @@ class GTranslateV4Client {
         // Mode tracking
         this.currentMode = 'talks'; // Default mode: talks or earbuds
 
+        // Paragraph buffering — final translations are accumulated into a shared card
+        // and sealed after a silence timeout or word-count threshold.
+        this.currentParagraphEl = null;
+        this.paragraphWordCount = 0;
+        this.paragraphSealTimer = null;
+
         // Text-to-Speech
         this.ttsEnabled = false;
         this.speechSynthesis = window.speechSynthesis;
@@ -525,33 +531,70 @@ class GTranslateV4Client {
             return; // Skip visual display in EarBuds mode
         }
 
-        // Use template literals for faster HTML construction
-        const item = document.createElement('div');
-        item.className = data.isInterim ? 'translation-item interim' : 'translation-item';
-
-        item.innerHTML = `
-            <div class="original">📝 ${escapeHtml(sanitizeText(data.original))}</div>
-            <div class="translated">💬 ${escapeHtml(sanitizeText(data.translated))}</div>
-        `;
-
-        // Track interim elements for fast removal
         if (data.isInterim) {
+            const item = document.createElement('div');
+            item.className = 'translation-item interim';
+            item.innerHTML = `
+                <div class="original">📝 ${escapeHtml(sanitizeText(data.original))}</div>
+                <div class="translated">💬 ${escapeHtml(sanitizeText(data.translated))}</div>
+            `;
             this.interimElements.add(item);
-        }
+            const fragment = document.createDocumentFragment();
+            fragment.appendChild(item);
+            this.resultsContainer.insertBefore(fragment, this.resultsContainer.firstChild);
+        } else {
+            // Final: buffer into shared paragraph card
+            const translated = sanitizeText(data.translated).trim();
+            if (!translated) return; // Skip empty/whitespace-only translations
 
-        // Use fragment to batch DOM operations
-        const fragment = document.createDocumentFragment();
-        fragment.appendChild(item);
-        this.resultsContainer.insertBefore(fragment, this.resultsContainer.firstChild);
+            if (!this.currentParagraphEl) {
+                this.currentParagraphEl = document.createElement('div');
+                this.currentParagraphEl.className = 'translation-item translation-paragraph';
+                this.currentParagraphEl.innerHTML = '<div class="translated">💬 <span class="para-text"></span></div>';
+                this.resultsContainer.insertBefore(this.currentParagraphEl, this.resultsContainer.firstChild);
+            }
+
+            const paraText = this.currentParagraphEl.querySelector('.para-text');
+            if (paraText) {
+                const separator = paraText.textContent ? ' ' : '';
+                paraText.textContent += separator + translated;
+                // Increment word count only when text is actually appended
+                this.paragraphWordCount += translated.split(/\s+/).filter(Boolean).length;
+            } else {
+                console.error('[paragraph] .para-text span missing — translation dropped:', translated);
+            }
+
+            clearTimeout(this.paragraphSealTimer);
+            if (this.paragraphWordCount >= 60) {
+                this.sealCurrentParagraph();
+            } else {
+                // 10s: Web Speech API fires per utterance — shorter than GTranslate (20s)
+                // but longer than NovaTranslate (8s) since browser STT pauses more.
+                this.paragraphSealTimer = setTimeout(() => this.sealCurrentParagraph(), 10000);
+            }
+        }
 
         // Limit DOM size to prevent performance degradation
         const maxItems = 50;
         while (this.resultsContainer.children.length > maxItems) {
             const lastChild = this.resultsContainer.lastChild;
-            // Remove from interim tracking if applicable
+            if (lastChild === this.currentParagraphEl) break; // Never evict the active paragraph
             this.interimElements.delete(lastChild);
             this.resultsContainer.removeChild(lastChild);
         }
+
+        // If the active paragraph was evicted by an interim card flood, start fresh
+        // rather than silently writing to a detached node.
+        if (this.currentParagraphEl && !this.resultsContainer.contains(this.currentParagraphEl)) {
+            this.sealCurrentParagraph();
+        }
+    }
+
+    sealCurrentParagraph() {
+        clearTimeout(this.paragraphSealTimer);
+        this.paragraphSealTimer = null;
+        this.currentParagraphEl = null;
+        this.paragraphWordCount = 0;
     }
 
     clearInterimTranslations() {

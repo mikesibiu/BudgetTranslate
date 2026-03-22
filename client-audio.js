@@ -203,6 +203,10 @@ Object.assign(GTranslateV4Client.prototype, {
             this.translationCount = 0;
             this.wordsTranslated = 0;
             this.resultsContainer.innerHTML = '';
+            clearTimeout(this.paragraphSealTimer);
+            this.paragraphSealTimer = null;
+            this.currentParagraphEl = null;
+            this.paragraphWordCount = 0;
             this.startBtn.disabled = true;
             this.stopBtn.disabled = false;
             this.audioSource.disabled = true;
@@ -256,6 +260,10 @@ Object.assign(GTranslateV4Client.prototype, {
         this.interimText.textContent = 'Waiting for speech...';
         this.lastTranslation = '';
         this.lastTranslationTime = 0;
+        clearTimeout(this.paragraphSealTimer);
+        this.paragraphSealTimer = null;
+        this.currentParagraphEl = null;
+        this.paragraphWordCount = 0;
 
         // Stop any playing speech and clear queue
         if (this.speechSynthesis) {
