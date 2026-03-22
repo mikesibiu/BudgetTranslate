@@ -172,11 +172,8 @@ const parent = projectId ? `projects/${projectId}/locations/${location}` : null;
 // Both contain the same 734 JW domain entries; the en→ro one has columns swapped.
 const roEnGlossaryPath = parent ? `${parent}/glossaries/ro-en-religious-terms` : null;
 const enRoGlossaryPath = parent ? `${parent}/glossaries/en-ro-religious-terms` : null;
-const glossaryEnabled = process.env.GLOSSARY_ENABLED === 'true'; // opt-in only: set GLOSSARY_ENABLED=true to enable
-
 // Helper: pick the right glossary path for a given translation direction
 function getGlossaryPath(sourceLangCode, targetLangCode) {
-    if (!glossaryEnabled) return null;
     if (sourceLangCode === 'ro' && targetLangCode === 'en') return roEnGlossaryPath;
     if (sourceLangCode === 'en' && targetLangCode === 'ro') return enRoGlossaryPath;
     return null; // no glossary for other language pairs
@@ -196,9 +193,8 @@ logger.info('✅ Google Cloud Translation v3 client initialized', {
     projectId,
     location,
     translationModel,
-    glossaryEnabled,
-    roEnGlossary: glossaryEnabled ? roEnGlossaryPath : 'disabled',
-    enRoGlossary: glossaryEnabled ? enRoGlossaryPath : 'disabled',
+    roEnGlossary: roEnGlossaryPath || 'disabled',
+    enRoGlossary: enRoGlossaryPath || 'disabled',
 });
 
 // Log startup configuration
